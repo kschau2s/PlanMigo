@@ -44,10 +44,9 @@ services:
 
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
-    env_file:
-      - .env
     environment:
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-change-me}
+      PLANMIGO_BACKEND_URL: http://backend:8000/api/v1
     volumes:
       - ./openwebui:/app/backend/data/pipelines
       - planmigo-openwebui-data:/app/backend/data
