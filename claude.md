@@ -74,6 +74,59 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-07-14] — Initiales Code-Skelett (Backend, Frontend, Docker, Open WebUI)
+
+**Typ:** Feature
+**Betroffen:** `backend/`, `frontend/`, `openwebui/`, `docker-compose.yml`, `.env.example`
+**Architektur geändert:** nein (Skelett folgt exakt der in `ARCHITECTURE.md` v1.0.0 festgelegten Struktur)
+
+### Was
+- `backend/app/`: `main.py` (App-Factory, CORS, Router-Include), `config.py` (Pydantic Settings),
+  `core/` (`deps.py`, `security.py`, `logging.py`), `models/` (SQLAlchemy: `User`, `Conversation`,
+  `TripPlan`, `TripItem` inkl. `session.py` für Engine/Session-Factory), `schemas/` (`chat.py`,
+  `trip.py`, `search.py`), `services/` (`openrouter.py` mit Retry/Timeout/Fehler-Mapping,
+  `planner.py` für Clarify-Loop + Plan-Komposition, `travel_api.py` als Adapter-Platzhalter für
+  Amadeus/Booking/GetYourGuide, `prompts/clarify.md` + `prompts/compose.md`), `api/v1/` (`health`,
+  `chat`, `trips`, `search`, `router.py`-Aggregat), `tests/test_health.py`, `requirements.txt`.
+- `frontend/`: Vite + React 18 + TypeScript (strict) + Tailwind, `styles/tokens.css` +
+  `tailwind.config.js` mit den 5 Farb-Tokens, `api/client.ts` (Axios) + `api/chat.ts` + `api/trips.ts`,
+  `hooks/useChat.ts` + `useTripPlan.ts` + `useKeywords.ts` (TanStack Query, kein Redux),
+  `components/ChatWindow.tsx` + `KeywordPills.tsx` + `TripCard.tsx`, `pages/PlannerPage.tsx`, `App.tsx`.
+- `docker-compose.yml`: Services `db` (postgres:16), `backend`, `frontend`, `openwebui` im Netzwerk
+  `planmigo-net`; je ein `Dockerfile` für `backend/` und `frontend/`.
+- `openwebui/pipelines/planmigo_pipeline.py`: leitet Chat-Turns an `POST /api/v1/chat` weiter, kein
+  direkter OpenRouter-Zugriff aus Open WebUI.
+- `.env.example` um `POSTGRES_*` und Travel-API-Platzhalter (`AMADEUS_*`, `BOOKING_AFFILIATE_KEY`,
+  `GETYOURGUIDE_API_KEY`) sowie `VITE_API_URL` ergänzt.
+- `.gitignore` angelegt.
+
+### Warum
+- Umsetzung des in `ARCHITECTURE.md` beschriebenen Skeletts, damit ab sofort Feature-Arbeit auf
+  einer lauffähigen Basis stattfinden kann statt auf reiner Doku.
+
+### Auswirkungen
+- Neue Dependencies: Backend — `fastapi`, `uvicorn`, `pydantic`/`pydantic-settings`,
+  `sqlalchemy[asyncio]`, `asyncpg`, `httpx`, `python-jose`, `pytest`/`pytest-asyncio`. Frontend —
+  `react`, `react-dom`, `@tanstack/react-query`, `axios`, `vite`, `typescript`, `tailwindcss` (+
+  Dev-Tooling). Grund: Umsetzung der in `ARCHITECTURE.md` §3/§4 festgelegten Stacks.
+- Neue Env-Vars: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `VITE_API_URL`,
+  `AMADEUS_API_KEY`, `AMADEUS_API_SECRET`, `BOOKING_AFFILIATE_KEY`, `GETYOURGUIDE_API_KEY`.
+- Migrationen: keine (Tabellen werden aktuell nicht per Alembic verwaltet — `models/` definiert das
+  Schema, Migrations-Tooling ist ein offener Punkt).
+- Breaking: nein.
+
+### Verifiziert
+- Backend: `pip install -r requirements.txt`, App-Import + Routenliste, `pytest` (1 Test grün).
+- Frontend: `npm install`, `tsc -b` (typecheckt sauber), `vite build` (Produktionsbuild erfolgreich).
+- `docker compose config` validiert fehlerfrei.
+
+### Offene Punkte
+- [ ] Alembic-Migrationen für `models/` einführen
+- [ ] Amadeus/Booking/GetYourGuide-Adapter in `travel_api.py` implementieren (aktuell Platzhalter)
+- [ ] Auth-Flow (`get_current_user()` in `core/deps.py`) — aktuell nicht verdrahtet
+- [ ] Frontend-Tests (Vitest/RTL) ergänzen
+- [ ] Open-WebUI-Pipeline gegen echte Open-WebUI-Instanz end-to-end testen
+
 ## [2026-07-14] — Projekt-Setup & Dokumentationsgrundlage
 
 **Typ:** Docs

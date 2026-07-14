@@ -1,0 +1,17 @@
+# --- Python / backend ---
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+*.tsbuildinfo
+
+# --- Env ---
+.env
+
+# --- OS / editors ---
+.DS_Store

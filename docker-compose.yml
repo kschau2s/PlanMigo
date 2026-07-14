@@ -1,0 +1,67 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-planmigo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-planmigo}
+      POSTGRES_DB: ${POSTGRES_DB:-planmigo}
+    volumes:
+      - planmigo-db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - planmigo-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-planmigo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - planmigo-net
+
+  frontend:
+    build:
+      context: ./frontend
+    env_file:
+      - .env
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - planmigo-net
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    env_file:
+      - .env
+    environment:
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-change-me}
+    volumes:
+      - ./openwebui:/app/backend/data/pipelines
+      - planmigo-openwebui-data:/app/backend/data
+    ports:
+      - "${OPENWEBUI_PORT:-3000}:8080"
+    depends_on:
+      - backend
+    networks:
+      - planmigo-net
+
+networks:
+  planmigo-net:
+    driver: bridge
+
+volumes:
+  planmigo-db-data:
+  planmigo-openwebui-data:
