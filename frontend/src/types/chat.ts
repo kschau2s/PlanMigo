@@ -1,3 +1,5 @@
+import type { TripPlan } from "./trip";
+
 export interface ChatRequest {
   conversation_id: string | null;
   keywords: string[];
@@ -14,4 +16,14 @@ export interface ChatResponse {
 export interface ChatEntry {
   role: "user" | "assistant";
   content: string;
+}
+
+/** Client-side chat session shown in the sidebar (no backend listing endpoint yet). */
+export interface ChatSession {
+  id: string;
+  keywords: string[];
+  conversationId: string | null;
+  history: ChatEntry[];
+  plan: TripPlan | null;
+  lastMessage: string;
 }

@@ -92,10 +92,12 @@ async def build_trip_plan(db: AsyncSession, request: TripPlanRequest) -> TripPla
         today=date.today().isoformat(),
     )
 
+    # Composing the full plan JSON can take minutes on slower models.
     response = await openrouter.complete(
         messages=[ChatMessage(role="user", content=prompt)],
         response_format={"type": "json_object"},
         max_tokens=4000,
+        timeout_seconds=300.0,
     )
     plan_data = _parse_plan_json(response.content)
 

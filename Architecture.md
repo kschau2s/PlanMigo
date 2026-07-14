@@ -4,7 +4,7 @@
 > Jede KI-Session und jeder Entwickler liest diese Datei **vor** der ersten Code-Änderung.
 > Wird die Architektur geändert, **muss** diese Datei im selben Commit aktualisiert werden.
 
-**Version:** 1.1.0 · **Stand:** 2026-07-14 · **Owner:** Marco Martins (CTO)
+**Version:** 1.2.0 · **Stand:** 2026-07-14 · **Owner:** Marco Martins (CTO)
 
 ---
 
@@ -99,6 +99,7 @@ async def complete(
     temperature: float = 0.7,
     max_tokens: int = 2000,
     response_format: dict | None = None,   # z.B. {"type": "json_object"}
+    timeout_seconds: float = 60.0,         # Compose-Call nutzt 300 s (lange Plan-JSONs)
 ) -> LLMResponse: ...
 ```
 
@@ -134,7 +135,7 @@ async def complete(
 ### 4.1 Ordner
 ```
 frontend/src/
-├── components/   # Präsentational, zustandslos wo möglich
+├── components/   # Präsentational, zustandslos wo möglich (Sidebar, ChatWindow, TripCard, …)
 ├── pages/        # Routen-Ebene
 ├── hooks/        # useChat, useTripPlan, useKeywords
 ├── api/client.ts # Axios-Instanz, baseURL = VITE_API_URL
@@ -150,6 +151,9 @@ frontend/src/
 - Server-State: TanStack Query. Kein Redux.
 - Styling: Tailwind, Farben ausschließlich über Theme-Tokens (`bg-pm-cream`, `text-pm-orange`, …).
 - TypeScript strict. Kein `any`.
+- **UI-Shell:** Orange Fläche (`--pm-orange`) als App-Hintergrund, linke Sidebar (Chat-Liste,
+  Einstellungen/Profil-Platzhalter), Slide-Übergang Keyword-Panel → Chat-Panel. Chat-Sessions
+  sind bis zum Auth-/Listing-Endpoint clientseitiger State (`types/chat.ts → ChatSession`).
 
 ### 4.3 Farb-Tokens (`styles/tokens.css`)
 ```css
@@ -215,5 +219,6 @@ Tabellen werden beim Backend-Start per `Base.metadata.create_all` angelegt (Life
 
 | Datum | Version | Änderung | Autor |
 |---|---|---|---|
+| 2026-07-14 | 1.2.0 | UI-Shell mit Sidebar + Slide-Übergang, clientseitige Chat-Sessions, `complete()`-Timeout-Parameter (Compose 300 s), nginx `proxy_read_timeout` 360 s | Team |
 | 2026-07-14 | 1.1.0 | Chat-Vertrag (Start-Turn, READY_TO_PLAN-Handling), Same-Origin-API-Proxy, `conversations.user_id` nullable, Tabellen-Erstellung im Lifespan | Team |
 | 2026-07-14 | 1.0.0 | Initiale Architektur festgeschrieben | Team |

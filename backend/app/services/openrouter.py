@@ -26,6 +26,7 @@ async def complete(
     temperature: float = 0.7,
     max_tokens: int = 2000,
     response_format: dict | None = None,
+    timeout_seconds: float = TIMEOUT_SECONDS,
     settings: Settings | None = None,
 ) -> LLMResponse:
     settings = settings or get_settings()
@@ -47,7 +48,7 @@ async def complete(
     }
 
     last_error: Exception | None = None
-    async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
         for attempt in range(MAX_RETRIES):
             try:
                 response = await client.post(

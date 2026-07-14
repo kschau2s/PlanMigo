@@ -74,6 +74,50 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-07-14] — UI-Redesign: Sidebar, Orange-Fläche, Slide-Übergang in den Chat
+
+**Typ:** Feature
+**Betroffen:** `frontend/src/`, `frontend/nginx.conf`, `backend/app/services/`, `ARCHITECTURE.md`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.2.0)
+
+### Was
+- **Neue UI-Shell:** App-Hintergrund in `--pm-orange`; linke Sidebar (`components/Sidebar.tsx`)
+  mit Logo, „＋ Neue Reise planen", Liste der geöffneten Chats (Titel = Keywords, Status =
+  „Neu" / „In Planung …" / „✓ Reiseziel") sowie Einstellungen/Profil als „bald"-Platzhalter
+  (Auth kommt später). Mobil als Overlay mit Hamburger-Button.
+- **Slide-Übergang:** Start im Keyword-Panel; „Planung starten" schiebt per
+  CSS-Transform (500 ms) dynamisch ins Chat-Panel. „Neue Reise planen" slidet zurück.
+- **Chat-Sessions clientseitig** (`types/chat.ts → ChatSession`): mehrere Chats parallel,
+  Wechsel über die Sidebar stellt Verlauf + Reiseplan wieder her. Pending/Error-Zustände
+  werden pro Session getrackt (kein Backend-Listing-Endpoint vorhanden — offener Punkt).
+- **Timeout-Fix Plan-Erstellung:** Compose-JSON dauert auf langsamen Modellen (z.B.
+  `deepseek-v4-flash`) mehrere Minuten → `openrouter.complete()` hat jetzt einen
+  `timeout_seconds`-Parameter (Compose: 300 s statt 60 s, vorher 3 sinnlose Retries → 503),
+  nginx `proxy_read_timeout` auf 360 s erhöht, `compose.md` begrenzt auf max. 14 Items mit
+  1-Satz-Beschreibungen, Spinner-Text weist auf die Wartezeit hin.
+
+### Warum
+- Nutzerwunsch: hochwertigeres UI mit Marken-Orange als Fläche, Chat-Verwaltung wie in
+  gängigen Chat-Apps und ein flüssiger Übergang von der Stichwort-Eingabe in den Dialog.
+
+### Auswirkungen
+- Neue Dependencies: keine (Playwright nur lokal im Scratchpad zur Verifikation).
+- Neue Env-Vars: keine.
+- Migrationen: keine.
+- Breaking: nein (`timeout_seconds` hat Default 60 s).
+
+### Verifiziert
+- `pytest` 10/10 grün, `tsc -b` + `vite build` sauber.
+- Playwright gegen den Docker-Stack (Frontend-nginx → Backend → OpenRouter → Postgres):
+  Keyword-Auswahl per Chips → Slide in den Chat → echter Migo-Dialog (2 Rückfragen) →
+  `ready_to_plan` → TripCard „Tirol, Österreich" mit Tages-Timeline gerendert; Sidebar-Wechsel
+  (zurück zu Keywords, Chat wieder öffnen) und Mobile-Overlay per Screenshot geprüft;
+  keine Console-Errors.
+
+### Offene Punkte
+- [ ] Backend-Endpoint `GET /conversations` für persistente Chat-Liste in der Sidebar
+- [ ] Einstellungen/Profil-Seiten (nach Auth-Flow)
+
 ## [2026-07-14] — Chatbot-Flow lauffähig gemacht + UI-Überarbeitung
 
 **Typ:** Feature + Fix

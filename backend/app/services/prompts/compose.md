@@ -36,7 +36,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Struktur:
 
 Regeln:
 - Reisedaten müssen zu den Wünschen des Nutzers passen und in der Zukunft liegen.
-- "day" zählt ab 1 (Anreisetag). Plane jeden Tag mit 2–4 Items, sortiert über "order".
+- "day" zählt ab 1 (Anreisetag). Plane jeden Tag mit 2–3 Items, sortiert über "order" —
+  insgesamt maximal 14 Items. Beschreibungen: genau 1 kurzer Satz.
 - Anreise (flight) an Tag 1, Unterkunft (stay) einmal pro Aufenthalt, dazu Aktivitäten und Restaurants.
 - Alle Texte in "payload" auf Deutsch. Keine erfundenen Buchungscodes oder Preise als Fakten —
   Preise als grobe Schätzung kennzeichnen ("ca.").
