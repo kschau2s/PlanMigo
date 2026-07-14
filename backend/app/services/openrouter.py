@@ -59,7 +59,11 @@ async def complete(
                     last_error = LLMServiceError(f"OpenRouter status {response.status_code}")
                     await asyncio.sleep(2**attempt)
                     continue
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    # Client errors (bad key, unknown model, …) won't heal — fail fast.
+                    raise LLMServiceError(
+                        f"OpenRouter status {response.status_code}: {response.text[:300]}"
+                    )
                 data = response.json()
                 return LLMResponse(
                     content=data["choices"][0]["message"]["content"],

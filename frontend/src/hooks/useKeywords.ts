@@ -14,5 +14,7 @@ export function useKeywords(initial: string[] = []) {
     setKeywords(keywords.filter((k) => k !== keyword));
   };
 
-  return { keywords, addKeyword, removeKeyword };
+  const clearKeywords = () => setKeywords([]);
+
+  return { keywords, addKeyword, removeKeyword, clearKeywords };
 }

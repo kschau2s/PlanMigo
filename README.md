@@ -152,7 +152,7 @@ docker compose up --build
 | Methode | Endpoint | Beschreibung |
 |---|---|---|
 | `GET` | `/api/v1/health` | Healthcheck |
-| `POST` | `/api/v1/chat` | Dialogturn → nächste Rückfrage der KI |
+| `POST` | `/api/v1/chat` | Dialogturn → nächste Rückfrage der KI (leere `message` startet die Konversation) |
 | `POST` | `/api/v1/trips/plan` | Schlagwörter + Antworten → Reiseplan |
 | `GET` | `/api/v1/trips/{id}` | Reiseplan abrufen |
 | `POST` | `/api/v1/search/flights` | Flugsuche (Amadeus) |

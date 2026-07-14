@@ -74,6 +74,68 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-07-14] — Chatbot-Flow lauffähig gemacht + UI-Überarbeitung
+
+**Typ:** Feature + Fix
+**Betroffen:** `backend/app/`, `backend/tests/`, `frontend/src/`, `frontend/nginx.conf`, `frontend/vite.config.ts`, `.env.example`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.1.0)
+
+### Was
+- **Backend-Fixes (Chatbot war vorher nicht lauffähig):**
+  - `models/conversation.py`: `user_id` nullable — vorher scheiterte JEDER Chat-Turn mit
+    IntegrityError, weil `next_clarifying_turn` Conversations ohne User anlegt (Auth noch offen).
+  - `main.py`: Lifespan erstellt fehlende Tabellen (`Base.metadata.create_all`) — vorher gab es
+    ohne Alembic gar keine Tabellen; plus `CORS_ORIGIN_REGEX` (Codespaces-Hosts).
+  - `config.py`: `.env` wird jetzt auch aus dem Repo-Root geladen — vorher lief `uvicorn` aus
+    `backend/` ohne API-Key (leerer `OPENROUTER_API_KEY` → 503).
+  - `services/planner.py`: Leere `message` startet die Konversation (Migo fragt zuerst);
+    Historie geht als echte Message-Liste (system + turns) an OpenRouter statt als Flat-Prompt;
+    `READY_TO_PLAN` wird robust erkannt (`in` statt `==`) und leakt nie mehr in die UI;
+    Sicherheitsnetz `MAX_CLARIFY_TURNS = 5`; `build_trip_plan` lädt die Dialog-Historie aus
+    `conversations.state` (vorher wurde der Plan ohne Gesprächskontext erstellt!); tolerantes
+    Parsing für Plan-JSON (Markdown-Fences), Datumsangaben und deutsche Budgetformate;
+    Items werden per `selectinload` geladen (async lazy-load hätte gecrasht — auch in
+    `GET /trips/{id}` gefixt).
+  - `services/openrouter.py`: 4xx-Fehler brechen sofort mit Detail ab statt 3× zu retryen.
+  - Prompts überarbeitet: `clarify.md` als System-Prompt (eine Frage pro Turn, Beispieloptionen,
+    max. {max_turns} Fragen), `compose.md` mit festem Payload-Schema
+    (`title/description/location/time/price`) und heutigem Datum.
+- **Frontend-Überarbeitung (komplett neues UI, nur die 5 Farb-Tokens):**
+  - Same-Origin-API: `api/client.ts` → `/api/v1`; Vite-Dev-Proxy + nginx-Proxy (`/api/` →
+    `backend:8000`) — funktioniert damit lokal, in Docker und in Codespaces ohne CORS-Konfiguration.
+  - `App.tsx`: App-Shell mit Sticky-Header (Logo, Wortmarke Plan/Migo), Footer.
+  - `PlannerPage.tsx`: Zwei-Phasen-Flow — (1) Keyword-Hero mit Vorschlags-Chips, Pills und
+    „Planung starten"-CTA, (2) Chat mit Migo; bei `ready_to_plan` automatische Plan-Erstellung
+    mit Lade- und Fehlerzuständen (inkl. Retry) und „Neue Reise planen"-Reset.
+  - `ChatWindow.tsx`: Chat-Bubbles mit Migo-Avatar, Auto-Scroll, Tipp-Indikator (animierte
+    Punkte), Auto-Fokus, Senden per Enter.
+  - `TripCard.tsx`: Reiseplan als Tages-Timeline mit Typ-Icons/-Labels (Anreise, Unterkunft,
+    Aktivität, Restaurant), strukturierter Payload-Darstellung (Titel, Beschreibung,
+    Zeit · Ort · Preis), Datums- und Budget-Chips.
+- **Tests:** `tests/test_chat.py` (Endpoint inkl. 503-Mapping) und `tests/test_planner.py`
+  (Start-Turn, Marker-Handling, Max-Turns, JSON-/Datums-/Budget-Parsing) — 10 Tests grün.
+- **Repo-Hygiene:** versehentlich committete `backend/.venv/`, `node_modules/`, `__pycache__/`
+  und `.pytest_cache/` aus dem Git-Index entfernt (~9300 Dateien; lagen trotz `.gitignore` im Repo).
+
+### Warum
+- Der Kern-Use-Case (ARCHITECTURE.md §6) war durchgängig defekt; das UI entsprach nicht dem
+  Produktanspruch aus README.md. Jetzt ist der komplette Flow Schlagwörter → Rückfragen →
+  Reiseplan end-to-end lauffähig.
+
+### Auswirkungen
+- Neue Dependencies: keine.
+- Neue Env-Vars: `CORS_ORIGIN_REGEX` (optional, Default: Codespaces-Hosts). `VITE_API_URL`
+  in `.env.example` auf `/api/v1` geändert (Same-Origin-Proxy).
+- Migrationen: keine (Tabellen via `create_all` beim Start; Alembic weiter offen).
+- Breaking: `POST /api/v1/chat` akzeptiert jetzt leere `message` als Start-Turn (rückwärtskompatibel).
+
+### Verifiziert
+- `pytest`: 10/10 grün. `tsc -b` + `vite build`: sauber.
+- End-to-End mit Postgres (Docker) + echtem OpenRouter-Key: Start-Turn → 3 Rückfragen →
+  `ready_to_plan: true` (Marker leakt nicht) → `POST /trips/plan` erzeugt Plan „Tirol, Österreich",
+  14.–21.09.2026, Budget 1500 €, 23 Items → `GET /trips/{id}` liefert Plan inkl. Items, 404 korrekt.
+- Vite-Dev-Proxy: Chat-Turn über `http://localhost:5173/api/v1/chat` erfolgreich.
+
 ## [2026-07-14] — Initiales Code-Skelett (Backend, Frontend, Docker, Open WebUI)
 
 **Typ:** Feature

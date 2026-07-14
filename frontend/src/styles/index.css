@@ -6,4 +6,6 @@
 
 body {
   background-color: var(--pm-cream);
+  color: var(--pm-green-dark);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }

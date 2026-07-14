@@ -4,7 +4,7 @@
 > Jede KI-Session und jeder Entwickler liest diese Datei **vor** der ersten Code-Änderung.
 > Wird die Architektur geändert, **muss** diese Datei im selben Commit aktualisiert werden.
 
-**Version:** 1.0.0 · **Stand:** 2026-07-14 · **Owner:** Marco Martins (CTO)
+**Version:** 1.1.0 · **Stand:** 2026-07-14 · **Owner:** Marco Martins (CTO)
 
 ---
 
@@ -105,16 +105,25 @@ async def complete(
 - Endpoint: `POST {OPENROUTER_BASE_URL}/chat/completions`
 - Pflicht-Header: `Authorization: Bearer {key}`, `HTTP-Referer: {OPENROUTER_SITE_URL}`,
   `X-Title: {OPENROUTER_APP_NAME}`
-- Retry: 3× exponentiell bei 429/5xx.
+- Retry: 3× exponentiell bei 429/5xx. 4xx (falscher Key, unbekanntes Modell) → sofortiger Abbruch.
 - Timeout: 60 s.
 - Fehler → `LLMServiceError`, im Router als HTTP 503 gemappt.
+
+### 3.2.1 Chat-Vertrag (`POST /api/v1/chat`)
+
+- **Leere `message` startet eine Konversation:** Migo stellt die erste Rückfrage aus den Keywords.
+- Der Clarify-Loop endet, wenn das LLM den internen Marker `READY_TO_PLAN` liefert **oder**
+  `MAX_CLARIFY_TURNS` (aktuell 5) erreicht ist. Der Marker verlässt das Backend nie —
+  die Response enthält stattdessen `ready_to_plan: true` + eine freundliche Abschlussnachricht.
+- `build_trip_plan` lädt die Dialog-Historie aus `conversations.state` und gibt sie dem
+  Compose-Prompt mit — der Plan basiert immer auf dem tatsächlichen Gespräch.
 
 ### 3.3 Datenmodell (Kern)
 
 | Tabelle | Felder (Auszug) |
 |---|---|
 | `users` | id, email, created_at |
-| `conversations` | id, user_id, keywords[], state (JSONB), created_at |
+| `conversations` | id, user_id (nullable bis Auth-Flow), keywords[], state (JSONB), created_at |
 | `trip_plans` | id, conversation_id, destination, start_date, end_date, budget, summary |
 | `trip_items` | id, trip_plan_id, type (flight/stay/activity/restaurant), payload (JSONB), day, order |
 
@@ -135,6 +144,9 @@ frontend/src/
 
 ### 4.2 Regeln
 - Datenzugriff **nur** über `hooks/` → `api/`. Keine `fetch`-Calls in Komponenten.
+- **Same-Origin-API:** `api/client.ts` nutzt standardmäßig `/api/v1`. Im Dev proxied Vite
+  (`vite.config.ts`), im Docker-Build nginx (`nginx.conf`) auf das Backend. Dadurch keine
+  CORS-/Host-Probleme (lokal, Docker, Codespaces).
 - Server-State: TanStack Query. Kein Redux.
 - Styling: Tailwind, Farben ausschließlich über Theme-Tokens (`bg-pm-cream`, `text-pm-orange`, …).
 - TypeScript strict. Kein `any`.
@@ -185,6 +197,9 @@ frontend/src/
 `docker-compose.yml` — Services: `db` (postgres:16) · `backend` (uvicorn) · `frontend` (nginx/vite preview) · `openwebui`.
 Ein gemeinsames Netzwerk `planmigo-net`. Secrets ausschließlich aus `.env`.
 
+Tabellen werden beim Backend-Start per `Base.metadata.create_all` angelegt (Lifespan in
+`main.py`) — Alembic-Migrationen sind weiterhin ein offener Punkt (siehe `CLAUDE.md`).
+
 ---
 
 ## 8. Nicht-Ziele (bewusst ausgeschlossen)
@@ -200,4 +215,5 @@ Ein gemeinsames Netzwerk `planmigo-net`. Secrets ausschließlich aus `.env`.
 
 | Datum | Version | Änderung | Autor |
 |---|---|---|---|
+| 2026-07-14 | 1.1.0 | Chat-Vertrag (Start-Turn, READY_TO_PLAN-Handling), Same-Origin-API-Proxy, `conversations.user_id` nullable, Tabellen-Erstellung im Lifespan | Team |
 | 2026-07-14 | 1.0.0 | Initiale Architektur festgeschrieben | Team |

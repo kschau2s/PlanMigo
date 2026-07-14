@@ -1,6 +1,7 @@
 import axios from "axios";
 
+// Default is same-origin: Vite (dev) and nginx (Docker) proxy /api to the backend.
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1",
+  baseURL: import.meta.env.VITE_API_URL ?? "/api/v1",
   headers: { "Content-Type": "application/json" },
 });

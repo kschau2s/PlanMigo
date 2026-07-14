@@ -1,10 +1,15 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Repo-root .env works when uvicorn runs from backend/; missing files are ignored (Docker
+# injects the same variables via env_file in docker-compose.yml).
+_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(_ROOT_ENV, ".env"), extra="ignore")
 
     # --- OpenRouter ---
     OPENROUTER_API_KEY: str = ""
@@ -16,6 +21,8 @@ class Settings(BaseSettings):
     # --- Backend ---
     DATABASE_URL: str = "postgresql+asyncpg://planmigo:planmigo@db:5432/planmigo"
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # Allows forwarded dev hosts (e.g. GitHub Codespaces) without listing each origin.
+    CORS_ORIGIN_REGEX: str | None = r"https://.*\.app\.github\.dev"
     SECRET_KEY: str = "change-me"
 
     # --- Travel APIs ---

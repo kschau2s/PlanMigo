@@ -1,6 +1,8 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import DBSession
 from app.models.trip_plan import TripPlan
@@ -21,7 +23,10 @@ async def create_trip_plan(request: TripPlanRequest, db: DBSession) -> TripPlan:
 
 @router.get("/trips/{trip_id}", response_model=TripPlanOut)
 async def get_trip_plan(trip_id: uuid.UUID, db: DBSession) -> TripPlan:
-    trip_plan = await db.get(TripPlan, trip_id)
+    result = await db.execute(
+        select(TripPlan).options(selectinload(TripPlan.items)).where(TripPlan.id == trip_id)
+    )
+    trip_plan = result.scalar_one_or_none()
     if trip_plan is None:
         raise HTTPException(status_code=404, detail="Trip plan not found")
     return trip_plan

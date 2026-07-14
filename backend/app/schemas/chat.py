@@ -12,7 +12,8 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     conversation_id: uuid.UUID | None = None
     keywords: list[str] = []
-    message: str
+    # Empty message starts a conversation: Migo asks the first question from the keywords.
+    message: str = ""
 
 
 class ChatResponse(BaseModel):
