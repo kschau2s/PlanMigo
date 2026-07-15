@@ -10,3 +10,9 @@ export async function getTripPlan(tripId: string): Promise<TripPlan> {
   const { data } = await apiClient.get<TripPlan>(`/trips/${tripId}`);
   return data;
 }
+
+/** All trip plans of the logged-in user (requires auth). */
+export async function fetchMyTrips(): Promise<TripPlan[]> {
+  const { data } = await apiClient.get<TripPlan[]>("/trips");
+  return data;
+}

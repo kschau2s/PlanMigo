@@ -124,7 +124,7 @@ export function SettingsPage({ settings, onUpdate, onResetLocal }: SettingsPageP
           <div>
             <b className="text-body font-bold text-content-body">Lokale Daten zurücksetzen</b>
             <p className="mt-0.5 text-caption text-content-muted">
-              Entfernt Einstellungen und die aktuelle Planung aus diesem Browser.
+              Entfernt Einstellungen und die aktuelle Planung aus diesem Browser und meldet dich ab.
             </p>
           </div>
           <button

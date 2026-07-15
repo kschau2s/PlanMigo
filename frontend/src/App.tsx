@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Sidebar } from "./components/Sidebar";
+import { useAuth } from "./hooks/useAuth";
 import { usePlannerSession, type StartOptions } from "./hooks/usePlannerSession";
 import { useSettings } from "./hooks/useSettings";
 import { ChatPage } from "./pages/ChatPage";
@@ -29,6 +30,7 @@ function App() {
   const [plans, setPlans] = useState<TripPlan[]>([]);
   const planner = usePlannerSession((plan) => setPlans((existing) => [...existing, plan]));
   const { settings, update, resetLocalData } = useSettings();
+  const auth = useAuth();
 
   const go = (next: Screen) => {
     setScreen(next);
@@ -46,6 +48,7 @@ function App() {
 
   const handleResetLocal = () => {
     resetLocalData();
+    auth.logout();
     planner.reset();
     setPlans([]);
     setScreen("start");
@@ -62,13 +65,18 @@ function App() {
         {screen === "suche" && <SearchPage onPlan={(keywords) => startChat({ keywords })} />}
         {screen === "reisen" && (
           <TripsPage
-            plans={plans}
+            sessionPlans={plans}
             planPending={planner.planPending}
+            loggedIn={auth.user !== null}
             onStartChat={() => go("chat")}
           />
         )}
         {screen === "profil" && (
-          <ProfilePage plansCount={plans.length} activePlanning={planner.session !== null} />
+          <ProfilePage
+            auth={auth}
+            sessionPlansCount={plans.length}
+            activePlanning={planner.session !== null}
+          />
         )}
         {screen === "einstellungen" && (
           <SettingsPage settings={settings} onUpdate={update} onResetLocal={handleResetLocal} />

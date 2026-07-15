@@ -27,17 +27,37 @@ MAX_CLARIFY_TURNS = 5
 VALID_ITEM_TYPES = {t.value for t in TripItemType}
 
 
+class ConversationAccessError(Exception):
+    """Conversation exists but belongs to a different user."""
+
+
+def _check_conversation_access(
+    conversation: Conversation, user_id: uuid.UUID | None
+) -> None:
+    if conversation.user_id is not None and conversation.user_id != user_id:
+        raise ConversationAccessError(str(conversation.id))
+
+
 async def next_clarifying_turn(
-    db: AsyncSession, conversation_id: uuid.UUID | None, keywords: list[str], user_message: str
+    db: AsyncSession,
+    conversation_id: uuid.UUID | None,
+    keywords: list[str],
+    user_message: str,
+    user_id: uuid.UUID | None = None,
 ) -> tuple[Conversation, str, bool]:
     conversation = None
     if conversation_id is not None:
         conversation = await db.get(Conversation, conversation_id)
 
     if conversation is None:
-        conversation = Conversation(keywords=keywords, state={"history": []})
+        conversation = Conversation(keywords=keywords, state={"history": []}, user_id=user_id)
         db.add(conversation)
         await db.flush()
+    else:
+        _check_conversation_access(conversation, user_id)
+        if conversation.user_id is None and user_id is not None:
+            # Guest conversation continued after login — claim it for the user.
+            conversation.user_id = user_id
 
     history: list[dict] = list(conversation.state.get("history", []))
     if user_message.strip():
@@ -74,8 +94,12 @@ async def next_clarifying_turn(
     return conversation, reply, ready_to_plan
 
 
-async def build_trip_plan(db: AsyncSession, request: TripPlanRequest) -> TripPlan:
+async def build_trip_plan(
+    db: AsyncSession, request: TripPlanRequest, user_id: uuid.UUID | None = None
+) -> TripPlan:
     conversation = await db.get(Conversation, request.conversation_id)
+    if conversation is not None:
+        _check_conversation_access(conversation, user_id)
     history: list[dict] = conversation.state.get("history", []) if conversation else []
     keywords = request.keywords or (conversation.keywords if conversation else [])
 

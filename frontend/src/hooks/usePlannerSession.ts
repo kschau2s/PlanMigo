@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { ChatSession } from "../types/chat";
 import type { TripPlan } from "../types/trip";
@@ -24,6 +25,7 @@ export function usePlannerSession(onPlanCreated?: (plan: TripPlan) => void) {
 
   const chat = useChat();
   const createTripPlan = useCreateTripPlan();
+  const queryClient = useQueryClient();
 
   const startPlan = (conversationId: string, sessionKeywords: string[]) => {
     setPlanPending(true);
@@ -34,6 +36,8 @@ export function usePlannerSession(onPlanCreated?: (plan: TripPlan) => void) {
         onSuccess: (plan) => {
           setSession((s) => (s ? { ...s, plan } : s));
           onPlanCreated?.(plan);
+          // Logged-in users see the new plan in the server-backed trips list.
+          queryClient.invalidateQueries({ queryKey: ["my-trips"] });
         },
         onError: () => setPlanError(true),
         onSettled: () => setPlanPending(false),

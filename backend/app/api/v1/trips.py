@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import DBSession
+from app.core.deps import CurrentUser, DBSession, OptionalUser
+from app.models.conversation import Conversation
 from app.models.trip_plan import TripPlan
 from app.schemas.trip import TripPlanOut, TripPlanRequest
 from app.services import planner
@@ -14,19 +15,44 @@ router = APIRouter(tags=["trips"])
 
 
 @router.post("/trips/plan", response_model=TripPlanOut)
-async def create_trip_plan(request: TripPlanRequest, db: DBSession) -> TripPlan:
+async def create_trip_plan(
+    request: TripPlanRequest, db: DBSession, user: OptionalUser
+) -> TripPlan:
     try:
-        return await planner.build_trip_plan(db, request)
+        return await planner.build_trip_plan(db, request, user_id=user.id if user else None)
+    except planner.ConversationAccessError as exc:
+        raise HTTPException(status_code=404, detail="Conversation not found") from exc
     except LLMServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.get("/trips", response_model=list[TripPlanOut])
+async def list_trip_plans(db: DBSession, user: CurrentUser) -> list[TripPlan]:
+    result = await db.execute(
+        select(TripPlan)
+        .join(Conversation, TripPlan.conversation_id == Conversation.id)
+        .where(Conversation.user_id == user.id)
+        .options(selectinload(TripPlan.items))
+        .order_by(Conversation.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 @router.get("/trips/{trip_id}", response_model=TripPlanOut)
-async def get_trip_plan(trip_id: uuid.UUID, db: DBSession) -> TripPlan:
+async def get_trip_plan(trip_id: uuid.UUID, db: DBSession, user: OptionalUser) -> TripPlan:
     result = await db.execute(
         select(TripPlan).options(selectinload(TripPlan.items)).where(TripPlan.id == trip_id)
     )
     trip_plan = result.scalar_one_or_none()
     if trip_plan is None:
+        raise HTTPException(status_code=404, detail="Trip plan not found")
+
+    conversation = await db.get(Conversation, trip_plan.conversation_id)
+    if (
+        conversation is not None
+        and conversation.user_id is not None
+        and (user is None or user.id != conversation.user_id)
+    ):
+        # Plans owned by an account are only visible to that account.
         raise HTTPException(status_code=404, detail="Trip plan not found")
     return trip_plan

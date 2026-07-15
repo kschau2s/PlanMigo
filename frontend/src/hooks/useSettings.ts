@@ -48,6 +48,7 @@ export function useSettings() {
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem("pm_web_screen");
+      localStorage.removeItem("pm_token");
     } catch {
       // ignore
     }

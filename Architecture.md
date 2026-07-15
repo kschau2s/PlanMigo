@@ -4,7 +4,7 @@
 > Jede KI-Session und jeder Entwickler liest diese Datei **vor** der ersten Code-Änderung.
 > Wird die Architektur geändert, **muss** diese Datei im selben Commit aktualisiert werden.
 
-**Version:** 1.5.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
+**Version:** 1.6.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
 
 ---
 
@@ -68,27 +68,48 @@
 
 ### 3.1 Ordner
 ```
-backend/app/
-├── main.py            # create_app(), CORS, Router-Include, Lifespan
-├── config.py          # class Settings(BaseSettings)
-├── api/v1/
-│   ├── router.py      # APIRouter-Aggregat
-│   ├── chat.py        # POST /chat
-│   ├── trips.py       # POST /trips/plan, GET /trips/{id}
-│   ├── search.py      # POST /search/{flights,stays,activities}
-│   └── health.py      # GET /health
-├── services/
-│   ├── openrouter.py  # LLM-Client (einziger Ort mit OpenRouter-Wissen)
-│   ├── planner.py     # Dialogsteuerung + Planaufbau
-│   ├── travel_api.py  # Amadeus / Booking / GetYourGuide Adapter
-│   └── prompts/       # System-Prompts als .md/.txt
-├── models/            # SQLAlchemy: User, Conversation, TripPlan, TripItem
-├── schemas/           # Pydantic: chat.py, trip.py, search.py
-└── core/
-    ├── deps.py        # get_db(), get_settings(), get_current_user()
-    ├── security.py
-    └── logging.py
+backend/
+├── alembic.ini        # Alembic-Konfiguration (URL kommt aus Settings, nie hartcodiert)
+├── alembic/           # env.py (async) + versions/ — Alembic besitzt das Schema
+└── app/
+    ├── main.py        # create_app(), CORS, Router-Include, Lifespan (führt Migrationen aus)
+    ├── config.py      # class Settings(BaseSettings)
+    ├── api/v1/
+    │   ├── router.py  # APIRouter-Aggregat
+    │   ├── auth.py    # POST /auth/register, POST /auth/login, GET /auth/me
+    │   ├── chat.py    # POST /chat (optionale Auth)
+    │   ├── trips.py   # POST /trips/plan, GET /trips (Auth), GET /trips/{id}
+    │   ├── search.py  # POST /search/{flights,stays,activities}
+    │   └── health.py  # GET /health
+    ├── services/
+    │   ├── openrouter.py  # LLM-Client (einziger Ort mit OpenRouter-Wissen)
+    │   ├── planner.py     # Dialogsteuerung + Planaufbau
+    │   ├── travel_api.py  # Amadeus / Booking / GetYourGuide Adapter
+    │   └── prompts/       # System-Prompts als .md/.txt
+    ├── models/            # SQLAlchemy: User, Conversation, TripPlan, TripItem
+    ├── schemas/           # Pydantic: auth.py, chat.py, trip.py, search.py
+    └── core/
+        ├── deps.py        # get_db(), get_settings(), get_current_user(), get_optional_user()
+        ├── security.py    # bcrypt-Hashing + JWT (HS256, SECRET_KEY aus .env)
+        └── logging.py
 ```
+
+### 3.1.1 Auth-Flow
+
+- **Registrieren/Anmelden:** `POST /auth/register` (409 bei doppelter E-Mail) und
+  `POST /auth/login` (401 bei falschen Daten, identische Meldung gegen Account-Enumeration)
+  geben `{access_token, token_type, user}` zurück. Passwörter als bcrypt-Hash in
+  `users.password_hash`; JWT (HS256, `SECRET_KEY`, 24 h) trägt die User-ID als `sub`.
+- **Zwei Dependency-Stufen:** `CurrentUser` (401 ohne gültigen Token — `/auth/me`, `GET /trips`)
+  und `OptionalUser` (Gast erlaubt — `/chat`, `/trips/plan`, `GET /trips/{id}`). Chat und
+  Planung funktionieren weiterhin ohne Konto.
+- **Ownership:** Neue Conversations erhalten die User-ID; eine Gast-Conversation wird beim
+  nächsten Turn nach Login übernommen („geclaimt"). Fremde Conversations/Trips antworten 404
+  (`ConversationAccessError` im Planner). `GET /trips` listet die Pläne des Users über den
+  Join `trip_plans → conversations.user_id`.
+- **Migrationen:** Alembic besitzt das Schema; der Lifespan führt `alembic upgrade head` beim
+  Start aus (idempotent, in einem Worker-Thread, da `env.py` einen eigenen Event-Loop fährt).
+  Baseline-Migration `0001` deckt frische **und** per `create_all` gebootstrappte DBs ab.
 
 ### 3.2 OpenRouter-Integration (`services/openrouter.py`)
 
@@ -125,8 +146,8 @@ async def complete(
 
 | Tabelle | Felder (Auszug) |
 |---|---|
-| `users` | id, email, created_at |
-| `conversations` | id, user_id (nullable bis Auth-Flow), keywords[], state (JSONB), created_at |
+| `users` | id, email, password_hash (bcrypt, nullable für Alt-Zeilen), created_at |
+| `conversations` | id, user_id (nullable — Gäste; wird nach Login geclaimt), keywords[], state (JSONB), created_at |
 | `trip_plans` | id, conversation_id, destination, start_date, end_date, budget, summary |
 | `trip_items` | id, trip_plan_id, type (flight/stay/activity/restaurant), payload (JSONB), day, order |
 
@@ -170,8 +191,13 @@ frontend/src/
   `localStorage["pm_settings"]` via `useSettings`).
 - **Session-State:** `usePlannerSession` (Hook auf App-Ebene) hält genau eine aktive
   `ChatSession` (`types/chat.ts`) inkl. Pending-/Fehler-Flags und sammelt erstellte `TripPlan`s
-  clientseitig für `TripsPage`/`ProfilePage` — kein Backend-Listing-Endpoint vorhanden,
-  Sitzungsdaten überleben keinen Reload.
+  clientseitig; nach Plan-Erstellung wird die `["my-trips"]`-Query invalidiert.
+- **Auth im Frontend:** `useAuth` (App-Ebene) hält `user`/`login`/`register`/`logout`; das JWT
+  liegt in `localStorage["pm_token"]` und wird per Axios-Request-Interceptor
+  (`api/client.ts`) als `Authorization: Bearer` mitgesendet. `ProfilePage` zeigt Gästen das
+  Anmelde-/Registrierformular, Eingeloggten Konto + Statistiken + Abmelden. `TripsPage` mischt
+  die server-seitige Liste (`GET /trips` via `useMyTrips`, überlebt Reloads) mit den
+  Sitzungs-Plänen von Gästen. „Lokale Daten zurücksetzen" (Einstellungen) meldet auch ab.
 
 ### 4.3 Farb-Tokens (`styles/tokens.css`)
 
@@ -248,8 +274,9 @@ eigenen (soliden) Token verwenden.
 `docker-compose.yml` — Services: `db` (postgres:16) · `backend` (uvicorn) · `frontend` (nginx/vite preview) · `openwebui`.
 Ein gemeinsames Netzwerk `planmigo-net`. Secrets ausschließlich aus `.env`.
 
-Tabellen werden beim Backend-Start per `Base.metadata.create_all` angelegt (Lifespan in
-`main.py`) — Alembic-Migrationen sind weiterhin ein offener Punkt (siehe `CLAUDE.md`).
+Das Schema wird beim Backend-Start per **Alembic** (`alembic upgrade head` im Lifespan)
+aktuell gehalten; neue Schema-Änderungen bekommen eine neue Revision unter
+`backend/alembic/versions/` (nie mehr `create_all` außerhalb der Baseline-Migration).
 
 ---
 
@@ -266,6 +293,7 @@ Tabellen werden beim Backend-Start per `Base.metadata.create_all` angelegt (Life
 
 | Datum | Version | Änderung | Autor |
 |---|---|---|---|
+| 2026-07-15 | 1.6.0 | Auth-Flow: `/auth/register|login|me` (bcrypt + JWT), `CurrentUser`/`OptionalUser`-Dependencies, Conversation-Ownership inkl. Gast-Claim, `GET /trips`-Listing pro User, Alembic eingeführt (Lifespan migriert statt `create_all`, `users.password_hash`), Frontend: `useAuth` + Login/Registrierung in `ProfilePage`, Token-Interceptor, server-backed `TripsPage` | Team |
 | 2026-07-15 | 1.5.0 | UI-Shell auf Design-Export „Web-App" umgebaut: linke Sidebar (Start/Suche/Reisen/Profil/Einstellungen + „Chat starten") statt Nav-Topbar, sechs Screens in `pages/` mit State-basiertem Switching, `usePlannerSession`/`useSettings`-Hooks, `Nav`/`TripPanel`/`ChatLayout`/`KeywordPills`/`useKeywords` entfernt, Nutzer-Bubbles & Send-Buttons auf Sage | Team |
 | 2026-07-15 | 1.4.0 | UI-Shell strukturell auf den Design-Export umgebaut: `Nav`+`ChatLayout` statt Sidebar+Slide-Übergang, `ChatWindow` nur noch Bubble-Kette+Composer, `Sidebar.tsx` entfernt, Mehrfach-Chat-Verwaltung im UI entfällt. `--surface-page` von `--pm-orange` auf `--pm-cream` korrigiert (Original-Tokens-Export) | Team |
 | 2026-07-14 | 1.3.0 | Design-System-Integration: `tokens.css`/`tailwind.config.js` auf 13-Ton-Basis-Palette + semantische Aliases erweitert, geteilte UI-Primitives `components/Chat.tsx` (Nav, Bubble, Chip, QuestionCard, Composer, TripPanel, ChatLayout), bestehende Komponenten (Sidebar, PlannerPage, ChatWindow, TripCard, KeywordPills) auf die neuen Tokens umgestellt (Funktionalität unverändert) | Team |

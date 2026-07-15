@@ -74,6 +74,82 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-07-15] — Auth-Flow: Registrierung, Login, eigene Reisen-Liste + Alembic
+
+**Typ:** Feature
+**Betroffen:** `backend/alembic{,.ini}` (neu), `backend/app/{main,config}.py`,
+`backend/app/core/{security,deps}.py`, `backend/app/models/user.py`,
+`backend/app/schemas/auth.py` (neu), `backend/app/api/v1/{auth(neu),chat,trips,router}.py`,
+`backend/app/services/planner.py`, `backend/tests/{test_auth(neu),test_chat}.py`,
+`backend/requirements.txt`, `frontend/src/api/{client,auth(neu),trips}.ts`,
+`frontend/src/hooks/{useAuth(neu),useTripPlan,usePlannerSession,useSettings}.ts`,
+`frontend/src/types/auth.ts` (neu), `frontend/src/pages/{ProfilePage,TripsPage,SettingsPage}.tsx`,
+`frontend/src/App.tsx`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.6.0)
+
+### Was
+- **Alembic eingeführt:** `backend/alembic/` (async env.py, URL aus `Settings` — nie hartcodiert),
+  Baseline-Migration `0001` (idempotent: `create_all(checkfirst)` für frische DBs **plus**
+  Spalten-Check für DBs, die noch vom alten `create_all`-Startup stammen). Der Lifespan führt
+  jetzt `alembic upgrade head` aus (in `asyncio.to_thread`, da env.py einen eigenen Loop fährt)
+  statt `Base.metadata.create_all` — damit ist der Alembic-Punkt aus dem Skelett-Eintrag erledigt.
+- **Backend-Auth:** `users.password_hash` (bcrypt; nullable für Alt-Zeilen),
+  `POST /auth/register` (201; 409 bei doppelter E-Mail, E-Mail lowercased),
+  `POST /auth/login` (401 mit identischer Meldung für unbekannte E-Mail/falsches Passwort —
+  keine Account-Enumeration), `GET /auth/me`. JWT über bestehendes `core/security.py`
+  (HS256, `SECRET_KEY`, 24 h, `sub` = User-ID). Neue Dependencies `CurrentUser` (401-Pflicht)
+  und `OptionalUser` (Gast erlaubt) in `core/deps.py` via `HTTPBearer(auto_error=False)`.
+- **Ownership:** `/chat` und `/trips/plan` laufen mit `OptionalUser` — Gäste können weiterhin
+  ohne Konto planen. Neue Conversations bekommen die User-ID; eine Gast-Conversation wird beim
+  nächsten Turn nach Login geclaimt. Fremde Conversations/Pläne → 404
+  (`planner.ConversationAccessError`). Neu: `GET /trips` (Auth-Pflicht) listet die Pläne des
+  Users (Join über `conversations.user_id`, neueste zuerst).
+- **Frontend-Auth:** JWT in `localStorage["pm_token"]`, Axios-Request-Interceptor in
+  `api/client.ts`; `useAuth`-Hook (App-Ebene) mit `login/register/logout` + `GET /auth/me`
+  beim Start (ungültiger Token wird verworfen). `ProfilePage`: Anmelde-/Registrierformular
+  für Gäste (deutsche Fehlermeldungen für 401/409/422), eingeloggt Konto-Karte mit E-Mail,
+  „Mitglied seit", Statistiken (Server-Zahl) und Abmelden. `TripsPage`: mischt `GET /trips`
+  (via `useMyTrips`, TanStack Query) mit Sitzungs-Plänen von Gästen; Hinweistexte je nach
+  Login-Status. Nach Plan-Erstellung wird `["my-trips"]` invalidiert. „Lokale Daten
+  zurücksetzen" entfernt auch den Token und meldet ab.
+
+### Warum
+- Nutzeranfrage: „wie kann man eine Datenbank einstellen, dass man sich einloggen kann und
+  einen neuen Kunden anlegen kann" → Umsetzung des vorgeschlagenen Pakets (Alembic → Auth-
+  Endpoints → get_current_user/GET /trips → Frontend). Reisepläne überleben damit erstmals
+  einen Reload — der größte offene Punkt der Web-App-Shell.
+
+### Auswirkungen
+- Neue Dependencies (Backend): `alembic` (Migrations-Tooling, ersetzt create_all-Startup),
+  `bcrypt` (Passwort-Hashing; direkt statt passlib — eine Abhängigkeit weniger),
+  `email-validator` (für Pydantics `EmailStr` in den Auth-Schemas). Frontend: keine.
+- Neue Env-Vars: keine (`SECRET_KEY` existierte bereits; in Produktion zwingend ändern).
+- Migrationen: `0001_initial_schema_and_password_hash` (läuft automatisch beim Backend-Start).
+- Breaking: nein — Chat/Planung funktionieren unverändert ohne Konto; `TripsPage`/`ProfilePage`
+  haben neue Props (`sessionPlans`/`auth`).
+
+### Verifiziert
+- `pytest` im Backend-Container: **16/16 grün** (10 Bestand + 6 neue Auth-Tests: Register/Login/
+  Me-Roundtrip, 409-Duplikat, 401-Falschpasswort, 422-Kurzpasswort, 401 ohne Token für
+  `/auth/me` und `GET /trips`). Die Auth-Tests laufen gegen die echte Postgres (Skip ohne DB);
+  Engine wird nach jedem Test disposed (pytest-asyncio: ein Loop pro Test).
+- Migration auf der **bestehenden** DB verifiziert: Log `Running upgrade  -> 0001`, `\d users`
+  zeigt `password_hash`; Health 200.
+- API-Smoke per curl: register 201 → login → me → `GET /trips` `[]` → falsches Passwort 401 →
+  `GET /trips` ohne Token 401.
+- `tsc -b` + `vite build` fehlerfrei.
+- Playwright-E2E gegen den Docker-Stack: Registrieren über das Profil → eingeloggt nach
+  Reload → Chat als eingeloggter User bis zum fertigen Reiseplan → **harter Reload → Plan
+  erscheint weiterhin unter „Gebuchte Reisen" (Server-Liste)** → Abmelden → erneutes Anmelden →
+  falsches Passwort zeigt deutsche Fehlermeldung. Keine Page-Errors.
+
+### Offen
+- [ ] Token-Ablauf (24 h) führt clientseitig nur zu stillem Logout beim nächsten `/auth/me` —
+  kein Refresh-Token-Flow.
+- [ ] Gast-Pläne, die **vor** einem Login erstellt wurden, werden nicht nachträglich dem Konto
+  zugeordnet (nur laufende Conversations werden geclaimt).
+- [ ] E-Mail-Verifikation / Passwort-Reset fehlen (bewusst außerhalb des MVP-Schnitts).
+
 ## [2026-07-15] — Web-App-Shell: Sidebar + 6 Screens (Design-Export „app.html")
 
 **Typ:** Feature | Breaking

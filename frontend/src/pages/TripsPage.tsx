@@ -2,11 +2,14 @@ import { useState } from "react";
 import { MapPin } from "lucide-react";
 
 import { TripCard } from "../components/TripCard";
+import { useMyTrips } from "../hooks/useTripPlan";
 import type { TripPlan } from "../types/trip";
 
 interface TripsPageProps {
-  plans: TripPlan[];
+  /** Plans created in this browser session (also covers guests). */
+  sessionPlans: TripPlan[];
   planPending: boolean;
+  loggedIn: boolean;
   onStartChat: () => void;
 }
 
@@ -17,8 +20,14 @@ function formatDate(iso: string | null): string | null {
   return parsed.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export function TripsPage({ plans, planPending, onStartChat }: TripsPageProps) {
+export function TripsPage({ sessionPlans, planPending, loggedIn, onStartChat }: TripsPageProps) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const myTrips = useMyTrips(loggedIn);
+
+  // Server list first (persisted), then session-only plans not yet in it (guest chats).
+  const serverPlans = loggedIn ? myTrips.data ?? [] : [];
+  const serverIds = new Set(serverPlans.map((plan) => plan.id));
+  const plans = [...serverPlans, ...sessionPlans.filter((plan) => !serverIds.has(plan.id))];
 
   return (
     <section className="w-full max-w-[860px] px-7 py-7">
@@ -27,8 +36,9 @@ export function TripsPage({ plans, planPending, onStartChat }: TripsPageProps) {
         Gebuchte Reisen
       </h1>
       <p className="mt-3 max-w-lg text-body text-content-muted">
-        Hier liegen die Reisepläne aus deinen Chats dieser Sitzung. Buchung und dauerhafte
-        Speicherung folgen mit dem Konto-System.
+        {loggedIn
+          ? "Deine Reisepläne sind in deinem Konto gespeichert. Die Buchung folgt in einer späteren Version."
+          : "Als Gast gelten deine Reisepläne nur für diese Browser-Sitzung — melde dich im Profil an, um sie dauerhaft zu speichern."}
       </p>
 
       {planPending && (
@@ -40,7 +50,13 @@ export function TripsPage({ plans, planPending, onStartChat }: TripsPageProps) {
         </div>
       )}
 
-      {plans.length === 0 && !planPending ? (
+      {loggedIn && myTrips.isLoading && (
+        <div className="mt-6 rounded-card border border-card bg-surface-card p-card shadow-soft">
+          <p className="text-body text-content-muted">Deine Reisen werden geladen …</p>
+        </div>
+      )}
+
+      {plans.length === 0 && !planPending && !myTrips.isLoading ? (
         <div className="mt-6 rounded-card border border-card bg-surface-card p-card text-center shadow-soft">
           <p className="font-serif text-cardTitle font-bold text-content-heading">
             Noch keine Reisen geplant
