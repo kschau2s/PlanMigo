@@ -14,15 +14,15 @@ export function KeywordPills({ keywords, onRemove }: KeywordPillsProps) {
             key={keyword}
             onClick={() => onRemove(keyword)}
             title={`„${keyword}" entfernen`}
-            className="group flex items-center gap-1.5 rounded-full bg-pm-sand px-3.5 py-1.5 text-sm font-medium text-pm-greenDark shadow-sm transition hover:bg-pm-sand/70"
+            className="group flex items-center gap-1.5 rounded-chip border border-card bg-pm-sand px-3.5 py-1.5 text-caption font-medium text-content-body shadow-soft transition-colors duration-quick ease-brand hover:bg-pm-paper"
           >
             {keyword}
-            <span className="text-pm-greenDark/60 group-hover:text-pm-orange">×</span>
+            <span className="text-content-muted group-hover:text-accent-primary">×</span>
           </button>
         ) : (
           <span
             key={keyword}
-            className="rounded-full bg-pm-sand px-3.5 py-1.5 text-sm font-medium text-pm-greenDark"
+            className="rounded-chip border border-card bg-pm-sand px-3.5 py-1.5 text-caption font-medium text-content-body"
           >
             {keyword}
           </span>

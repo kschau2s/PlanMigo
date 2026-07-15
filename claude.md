@@ -21,7 +21,7 @@
 
 | # | Regel |
 |---|---|
-| 1 | **Farben:** nur `#C9603A`, `#7B9D6F`, `#5C7A52`, `#D8C9A8`, `#FAF6F1`. Immer über Tokens, nie hartcodiert. |
+| 1 | **Farben:** nur die 13 Basis-Töne aus `frontend/src/styles/tokens.css` (`#7C4232`, `#C9603A`, `#A04A2A`, `#7B9D6F`, `#5C7A52`, `#D8C9A8`, `#E8C9A8`, `#FAF6F1`, `#F0E4D8`, `#E5D9C8`, `#3D2418`, `#8B7560`, `#FFFFFF`) und ihre semantischen Aliases (`surface-*`, `content-*`, `accent-*`, `border-*`). Immer über Tokens, nie hartcodiert, kein Inline-`style` für Farben. |
 | 2 | **Backend = FastAPI.** Kein Flask, kein Django, kein Express. |
 | 3 | **Frontend = React + TypeScript + Tailwind.** Kein Vue, kein Next.js im MVP. |
 | 4 | **LLM = OpenRouter.** Alle Calls ausschließlich über `services/openrouter.py`. Kein direkter Anbieter-SDK-Import. |
@@ -73,6 +73,128 @@ Danach:
 # TEIL B — Änderungsprotokoll
 
 > Neueste Einträge oben.
+
+## [2026-07-15] — Design-System: Struktur-Umbau auf Nav/ChatLayout + Farbkorrektur
+
+**Typ:** Feature | Fix
+**Betroffen:** `frontend/src/styles/tokens.css`, `frontend/src/pages/PlannerPage.tsx`,
+`frontend/src/components/{ChatWindow,Sidebar→gelöscht}.tsx`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.4.0)
+
+### Was
+- Der vorherige Design-System-Eintrag hatte nur **Tokens/Farben** auf die neuen Komponenten
+  umgestellt, aber die **Struktur** der alten App (linke Sidebar mit Chat-Liste, orange
+  Vollflächen-Hintergrund, Slide-Übergang Keyword-Panel → Chat-Panel, `ChatWindow` als umrahmte
+  Box mit eigenem Header/Input) beibehalten. Nutzer-Feedback: Das sieht dem hochgeladenen
+  Design-Export („Web-Dialog") strukturell nicht ähnlich genug.
+- `PlannerPage.tsx` komplett umgebaut auf die tatsächlichen Primitives aus `components/Chat.tsx`:
+  `Nav` (fixe Topbar) statt Sidebar, `ChatLayout` (zweispaltig: Chat links, `panel` rechts sticky)
+  statt Slide-Transition. Mehrfach-Chat-Verwaltung (Sidebar-Liste mehrerer Sessions) entfernt —
+  `PlannerPage` hält jetzt genau eine aktive `ChatSession` statt eines Arrays; Reset über einen
+  „← Neue Reise"-Link statt Sidebar-Button. `components/Sidebar.tsx` gelöscht (unbenutzt).
+- `ChatWindow.tsx` rendert nur noch die `Bubble`-Kette + Typing-Indicator + `Composer` (kein
+  umrahmter Container, kein eigener Header/Input mehr) — Autoscroll über `scrollIntoView` auf einen
+  Bottom-Anchor statt fixer Box-Höhe mit `overflow-y-auto`.
+- Rechte Spalte (`ChatLayout`-`panel`): solange kein Plan existiert, ein Platzhalter-Card
+  („Dein Vorschlag … erscheint hier"); sobald `session.plan` gesetzt ist, die bestehende
+  `TripCard` (volle Tages-Timeline, nicht die generische `TripPanel`-Komponente aus dem
+  Design-Export, da deren `stops`-Datenmodell die reale Timeline mit mehreren Items/Tag und
+  Typ-Icons nicht abbilden kann — `TripCard` übernimmt aber `TripPanel`s Karten-Optik
+  (`rounded-card`/`border-card`/`shadow-card`).
+- **Farbkorrektur:** `--surface-page` stand fälschlich auf `var(--pm-orange)` (Rest der alten
+  App-Optik aus dem vorherigen Eintrag) statt auf `var(--pm-cream)` wie im Original-Tokens-Export
+  vorgegeben. Dadurch wirkte z.B. das Nav-Wortmark kontrastarm. Zurückgestellt auf `--pm-cream`;
+  globale Body-Textfarbe von `--text-on-inverse` auf `--text-body` korrigiert; alle Textfarben in
+  `PlannerPage.tsx`, die von einem dunklen Seitenhintergrund ausgingen (`text-content-onInverse*`),
+  auf helle-Fläche-Varianten (`text-content-heading`/`text-content-muted`) umgestellt; „Planung
+  starten"-Button von `bg-surface-card` (auf hellem Grund unsichtbar) auf `bg-accent-primary`
+  geändert.
+
+### Warum
+- Der vorherige Eintrag hat Tokens/Komponenten technisch korrekt integriert, aber die Aufgabe
+  „an mein Design anpassen" nur halb erfüllt, solange das alte App-Gerüst weiterbestand. Auf
+  explizite Nutzerrückmeldung („sieht immer noch scheiße aus") strukturell nachgezogen.
+
+### Auswirkungen
+- Neue Dependencies: keine.
+- Neue Env-Vars: keine.
+- Migrationen: keine.
+- Breaking: Chat-Historie mehrerer parallel offener Reisen (Sidebar-Feature aus dem
+  „UI-Redesign"-Eintrag vom 2026-07-14) ist **nicht mehr verfügbar** — pro Browser-Tab existiert
+  nur noch eine aktive Planung gleichzeitig. Kann bei Bedarf als Dropdown/Popover im `Nav`
+  nachgerüstet werden.
+
+### Verifiziert
+- `tsc -b && vite build`: fehlerfrei (`node:20-slim`-Container).
+- `docker compose up -d --build frontend`: Container healthy.
+- End-to-End per Playwright (Chromium-Container, `planmigo-net`): Startbildschirm (helle Cream-
+  Fläche, Nav mit Logo/Wortmarke, weiße Karte) → Keyword → Chat-Slide (Nav bleibt oben, zweispaltig:
+  Bubble-Kette links, Platzhalter-Panel „Dein Vorschlag" rechts) → echte Migo-Antwort vom
+  Backend/OpenRouter als `Bubble` gerendert → keine Console-Errors.
+
+### Offen
+- [ ] Mehrfach-Chat-Verwaltung (mehrere Reisen parallel) ist weggefallen; falls gewünscht, als
+  Dropdown/Popover im `Nav` nachrüsten.
+
+## [2026-07-14] — Design-System-Integration (erweiterte Palette + geteilte UI-Primitives)
+
+**Typ:** Feature
+**Betroffen:** `frontend/src/styles/tokens.css`, `frontend/tailwind.config.js`,
+`frontend/src/components/Chat.tsx`, `frontend/src/assets/planmigo-logo.svg`,
+`frontend/src/components/{Sidebar,ChatWindow,TripCard,KeywordPills}.tsx`,
+`frontend/src/pages/PlannerPage.tsx`, `frontend/src/styles/index.css`, `frontend/package.json`,
+`frontend/package-lock.json`, `frontend/.dockerignore`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.3.0)
+
+### Was
+- `tokens.css`/`tailwind.config.js` von der bisherigen 5-Farben-Palette auf einen vollständigen
+  Design-Export umgestellt: 13-Ton-Basis-Palette (u.a. `--pm-terracotta`, `--pm-orange-deep`,
+  `--pm-sand-light`, `--pm-cream-warm`, `--pm-paper`, `--pm-espresso`, `--pm-taupe`, `--pm-white`)
+  plus semantische Aliases (`surface-page/card/inverse/chip/chip-active`,
+  `text-heading/body/muted/on-inverse/on-inverse-muted/eyebrow`, `accent-primary/secondary`,
+  `border-card/hairline`), Typo-Scale (Georgia/Helvetica, `font-serif`/`font-sans`,
+  `text-display/h1/h2/cardTitle/body/caption/eyebrow`), Spacing-/Radius-/Shadow-/Motion-Tokens.
+  `--surface-page` zeigt weiterhin auf `--pm-orange` (App-Hintergrund bleibt wie zuvor).
+- Neue geteilte Komponenten-Bibliothek `components/Chat.tsx`: `Nav`, `Bubble`, `Chip`,
+  `QuestionCard`, `Composer`, `TripPanel`, `ChatLayout` — 1:1 aus dem Design-Export übernommen.
+- `frontend/src/assets/planmigo-logo.svg` ergänzt.
+- Bestehende, funktionale Komponenten (`Sidebar`, `ChatWindow`, `TripCard`, `KeywordPills`,
+  `PlannerPage`) auf die neuen Tokens umgestellt — Backend-Anbindung, State und Handler
+  unverändert; `ChatWindow` nutzt jetzt `Bubble` für die Nachrichtenliste. Verbliebenes
+  Inline-`style` (Typing-Indicator-Animation-Delay) durch Tailwind-Arbitrary-Value-Klassen ersetzt.
+- `lucide-react` als Dependency ergänzt (Send-Icon in `Composer`/`ChatWindow`).
+
+### Warum
+- Integration des vom Design-Team bereitgestellten vollständigen Tokens-/Komponenten-Exports,
+  ohne die bereits lauffähige Chat-/Planungs-Anwendung (siehe Eintrag „UI-Redesign" unten) durch
+  eine statische Demo zu ersetzen.
+
+### Auswirkungen
+- Neue Dependencies: `lucide-react` (in `package.json` **und** `package-lock.json` — Lockfile per
+  Einweg-`node:20-slim`-Container regeneriert, da in dieser Umgebung kein Node.js installiert ist).
+- Neue Env-Vars: keine.
+- Migrationen: keine.
+- Breaking: **Farbpalette erweitert** (Regel #1 in Teil A geändert, war zuvor exakt 5 Hex-Werte).
+  Tailwind-Opacity-Modifier (`bg-pm-cream/20` o.ä.) funktionieren mit den neuen `var()`-basierten
+  Farb-Tokens nicht mehr — siehe ARCHITECTURE.md §4.3. Alle Vorkommen im Code auf `opacity-*`
+  (ganzes Element) bzw. solide Tokens umgestellt.
+- `frontend/.dockerignore` (neu, `node_modules`/`dist`/`.git`): fehlte bisher und ließ den
+  `frontend`-Docker-Build mit `invalid file request node_modules/.bin/acorn` abbrechen, sobald
+  lokal ein `node_modules` existiert (Windows-Symlink im Build-Kontext).
+
+### Verifiziert
+- `tsc -b && vite build`: fehlerfrei (in `node:20-slim`-Container, kein Node.js lokal installiert).
+- `docker compose up -d db backend frontend`: alle drei Container `healthy`/`Up`; `curl` auf
+  Frontend (`:5173`) und Backend-Health (`:8000/api/v1/health`) → beide `200`.
+- End-to-End per Playwright (Chromium-Container im `planmigo-net`): Startbildschirm (orange Fläche,
+  weiße Karte, Sidebar) → Keyword „Berge" hinzugefügt/entfernbar → „Planung starten" → Slide in den
+  Chat → echte Migo-Antwort vom Backend/OpenRouter in `Bubble`-Komponente gerendert, Sidebar zeigt
+  „In Planung …" → keine Console-Errors. (Testartefakt: `crypto.randomUUID` ist nur in sicheren
+  Kontexten verfügbar; der Playwright-Container erreichte die App über den internen Docker-Hostnamen
+  `frontend` statt `localhost` — mit `page.addInitScript`-Polyfill umgangen. Bei echtem Zugriff über
+  `localhost:5173` oder HTTPS tritt das nicht auf, betrifft nicht den Code.)
+- grep-Audit: keine Hex-Werte außerhalb `tokens.css`/Logo-SVG, keine Inline-`style`-Attribute, keine
+  `/`-Opacity-Modifier auf `pm-*`/`surface-*`/`content-*`/`accent-*`-Farben.
 
 ## [2026-07-14] — UI-Redesign: Sidebar, Orange-Fläche, Slide-Übergang in den Chat
 

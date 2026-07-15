@@ -4,7 +4,7 @@
 > Jede KI-Session und jeder Entwickler liest diese Datei **vor** der ersten Code-Änderung.
 > Wird die Architektur geändert, **muss** diese Datei im selben Commit aktualisiert werden.
 
-**Version:** 1.2.0 · **Stand:** 2026-07-14 · **Owner:** Marco Martins (CTO)
+**Version:** 1.4.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
 
 ---
 
@@ -56,7 +56,9 @@
    für externe Calls.
 5. **Pydantic ist die Vertragsgrenze.** Jeder Endpoint hat ein `schemas/`-Request- und Response-Modell.
    Keine `dict`-Rückgaben.
-6. **Farbpalette ist Gesetz.** Nur die fünf Tokens aus `tokens.css`. Keine Ad-hoc-Hex-Werte.
+6. **Farbpalette ist Gesetz.** Nur die in `tokens.css` definierte Basis-Palette (13 Töne) und ihre
+   semantischen Aliases (`surface-*`, `content-*`, `accent-*`, `border-*`). Keine Ad-hoc-Hex-Werte,
+   keine Inline-`style`-Farben.
 7. **Konfiguration nur über `.env` + `app/config.py` (Pydantic Settings).** Keine Secrets im Code.
 8. **API-Versionierung:** Alles unter `/api/v1/`. Breaking Changes → `/api/v2/`.
 
@@ -135,10 +137,13 @@ async def complete(
 ### 4.1 Ordner
 ```
 frontend/src/
-├── components/   # Präsentational, zustandslos wo möglich (Sidebar, ChatWindow, TripCard, …)
+├── components/   # Präsentational, zustandslos wo möglich (ChatWindow, TripCard, KeywordPills, …)
+│                 # Chat.tsx: geteilte Design-System-Primitives (Nav, Bubble, Chip, QuestionCard,
+│                 # Composer, TripPanel, ChatLayout)
 ├── pages/        # Routen-Ebene
 ├── hooks/        # useChat, useTripPlan, useKeywords
 ├── api/client.ts # Axios-Instanz, baseURL = VITE_API_URL
+├── assets/       # SVG/Bild-Assets (z.B. planmigo-logo.svg)
 ├── types/        # TS-Typen, gespiegelt aus Pydantic-Schemas
 └── styles/tokens.css
 ```
@@ -149,23 +154,54 @@ frontend/src/
   (`vite.config.ts`), im Docker-Build nginx (`nginx.conf`) auf das Backend. Dadurch keine
   CORS-/Host-Probleme (lokal, Docker, Codespaces).
 - Server-State: TanStack Query. Kein Redux.
-- Styling: Tailwind, Farben ausschließlich über Theme-Tokens (`bg-pm-cream`, `text-pm-orange`, …).
+- Styling: Tailwind, Farben ausschließlich über Theme-Tokens (`bg-surface-card`, `text-accent-primary`, …).
 - TypeScript strict. Kein `any`.
-- **UI-Shell:** Orange Fläche (`--pm-orange`) als App-Hintergrund, linke Sidebar (Chat-Liste,
-  Einstellungen/Profil-Platzhalter), Slide-Übergang Keyword-Panel → Chat-Panel. Chat-Sessions
-  sind bis zum Auth-/Listing-Endpoint clientseitiger State (`types/chat.ts → ChatSession`).
+- **UI-Shell:** Helle Fläche (`--surface-page` = `--pm-cream`) als App-Hintergrund, fixe `Nav`-
+  Topbar (Logo + Wortmarke). Kein Slide-Übergang mehr: Vor dem Start eine zentrierte Keyword-
+  Hero-Section, danach `ChatLayout` — zweispaltig, `Bubble`-Kette + `Composer` links, rechts
+  sticky ein Vorschlags-Panel (Platzhalter, dann `TripCard`). `PlannerPage` hält genau eine
+  aktive `ChatSession` (`types/chat.ts`); kein persistenter Verlauf mehrerer Reisen im UI (kann
+  bei Bedarf als Dropdown/Popover im `Nav` ergänzt werden, sobald ein Auth-/Listing-Endpoint
+  existiert).
 
 ### 4.3 Farb-Tokens (`styles/tokens.css`)
+
+Basis-Palette (13 Töne, einzige Quelle für Hex-Werte im gesamten Repo):
 ```css
 :root {
-  --pm-orange:     #C9603A;  /* CTAs, Logo-Icon, Labels */
-  --pm-sage:       #7B9D6F;  /* Zweitfarbe "Migo", Akzente */
-  --pm-green-dark: #5C7A52;  /* Häkchen, grüne Akzente */
-  --pm-sand:       #D8C9A8;  /* Pills, Chips, Trennlinien */
-  --pm-cream:      #FAF6F1;  /* Hintergrund, heller Text */
+  --pm-terracotta:   #7C4232;  /* Überschriften, Primärtext, dunkle Flächen */
+  --pm-orange:       #C9603A;  /* Logo-Icon, Eyebrow-Labels, CTAs */
+  --pm-orange-deep:  #A04A2A;  /* Deko-Kreise, Tertiär-Akzent */
+  --pm-sage:         #7B9D6F;  /* "Migo", Sekundär-Akzente, Sekundär-CTA */
+  --pm-green-dark:   #5C7A52;  /* Häkchen, grüne Akzente */
+  --pm-sand:         #D8C9A8;  /* Pills, Trennlinien, Chips */
+  --pm-sand-light:   #E8C9A8;  /* Labels auf Braun */
+  --pm-cream:        #FAF6F1;  /* App-Hintergrund (Fläche), heller Text */
+  --pm-cream-warm:   #F0E4D8;  /* Sekundärtext auf Braun */
+  --pm-paper:        #E5D9C8;  /* Logo-Schattenflügel, Hover-Flächen */
+  --pm-espresso:     #3D2418;  /* Fließtext dunkel */
+  --pm-taupe:        #8B7560;  /* Sekundärtext, Muted-Text */
+  --pm-white:        #FFFFFF;
 }
 ```
-`tailwind.config.js` → `theme.extend.colors.pm = { orange, sage, greenDark, sand, cream }`
+
+Semantische Aliases (das ist, worauf Komponenten tatsächlich zeigen sollen):
+`--surface-page/card/inverse/chip/chip-active`, `--text-heading/body/muted/on-inverse/on-inverse-muted/eyebrow`,
+`--accent-primary/secondary`, `--border-card/hairline`. Dazu Typo- (`--text-*-web`, `--font-serif`/`--font-sans`),
+Spacing- (`--space-1…8`, `--card-pad`), Radius- (`--radius-card/chip/button/image`) und Shadow-Tokens
+(`--shadow-card/soft`).
+
+`tailwind.config.js` → `theme.extend.colors = { pm: {…13 Töne}, surface: {…}, content: {…}, accent: {…} }`,
+plus `borderColor`, `fontFamily`, `fontSize`, `letterSpacing`, `borderRadius`, `boxShadow`, `spacing`,
+`transitionTimingFunction`/`transitionDuration` — alle als `var(--token)`-Referenzen, nie als Hex-Literal.
+
+Geteilte UI-Primitives (`components/Chat.tsx`): `Nav`, `Bubble`, `Chip`, `QuestionCard`, `Composer`,
+`TripPanel`, `ChatLayout` — nutzen ausschließlich die obigen Tokens.
+
+**Achtung Tailwind-Opacity-Modifier:** Da alle Farb-Utilities auf `var(--token)` (nicht auf Literal-Hex)
+zeigen, funktionieren Klassen wie `bg-pm-cream/20` nicht (Tailwind kann aus einer CSS-Variable keinen
+Alphakanal ableiten). Für Transparenz-Effekte stattdessen `opacity-*` auf das ganze Element oder einen
+eigenen (soliden) Token verwenden.
 
 ---
 
@@ -219,6 +255,8 @@ Tabellen werden beim Backend-Start per `Base.metadata.create_all` angelegt (Life
 
 | Datum | Version | Änderung | Autor |
 |---|---|---|---|
+| 2026-07-15 | 1.4.0 | UI-Shell strukturell auf den Design-Export umgebaut: `Nav`+`ChatLayout` statt Sidebar+Slide-Übergang, `ChatWindow` nur noch Bubble-Kette+Composer, `Sidebar.tsx` entfernt, Mehrfach-Chat-Verwaltung im UI entfällt. `--surface-page` von `--pm-orange` auf `--pm-cream` korrigiert (Original-Tokens-Export) | Team |
+| 2026-07-14 | 1.3.0 | Design-System-Integration: `tokens.css`/`tailwind.config.js` auf 13-Ton-Basis-Palette + semantische Aliases erweitert, geteilte UI-Primitives `components/Chat.tsx` (Nav, Bubble, Chip, QuestionCard, Composer, TripPanel, ChatLayout), bestehende Komponenten (Sidebar, PlannerPage, ChatWindow, TripCard, KeywordPills) auf die neuen Tokens umgestellt (Funktionalität unverändert) | Team |
 | 2026-07-14 | 1.2.0 | UI-Shell mit Sidebar + Slide-Übergang, clientseitige Chat-Sessions, `complete()`-Timeout-Parameter (Compose 300 s), nginx `proxy_read_timeout` 360 s | Team |
 | 2026-07-14 | 1.1.0 | Chat-Vertrag (Start-Turn, READY_TO_PLAN-Handling), Same-Origin-API-Proxy, `conversations.user_id` nullable, Tabellen-Erstellung im Lifespan | Team |
 | 2026-07-14 | 1.0.0 | Initiale Architektur festgeschrieben | Team |

@@ -33,20 +33,20 @@ function TripItemRow({ item }: { item: TripItem }) {
   ].filter((detail): detail is string => detail !== null);
 
   return (
-    <li className="flex gap-3 rounded-xl bg-pm-sand/30 p-3">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-pm-cream text-lg shadow-sm">
+    <li className="flex gap-3 rounded-card bg-pm-sand px-3 py-3">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-surface-card text-lg shadow-soft">
         {meta.icon}
       </span>
       <div className="min-w-0">
-        <p className="text-sm font-semibold">
+        <p className="text-body font-semibold text-content-heading">
           {title}
-          <span className="ml-2 rounded-full bg-pm-sage/15 px-2 py-0.5 text-xs font-medium text-pm-sage">
+          <span className="ml-2 rounded-chip bg-surface-card px-2 py-0.5 text-caption font-medium text-accent-secondary">
             {meta.label}
           </span>
         </p>
-        {description && <p className="mt-0.5 text-sm text-pm-greenDark/80">{description}</p>}
+        {description && <p className="mt-0.5 text-body text-content-body">{description}</p>}
         {details.length > 0 && (
-          <p className="mt-1 text-xs text-pm-greenDark/60">{details.join(" · ")}</p>
+          <p className="mt-1 text-caption text-content-muted">{details.join(" · ")}</p>
         )}
       </div>
     </li>
@@ -59,20 +59,18 @@ export function TripCard({ plan }: TripCardProps) {
   const endDate = formatDate(plan.end_date);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-pm-sand bg-pm-cream shadow-sm">
-      <div className="bg-pm-sage px-5 py-4 text-pm-cream">
-        <p className="text-xs font-medium uppercase tracking-wide text-pm-cream/80">
-          ✓ Dein Reiseplan
-        </p>
-        <h2 className="mt-0.5 text-2xl font-extrabold">{plan.destination}</h2>
-        <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
+    <section className="overflow-hidden rounded-card border border-card bg-surface-card shadow-card">
+      <div className="bg-surface-inverse px-5 py-4 text-content-onInverse">
+        <p className="pm-eyebrow text-content-onInverseMuted">✓ Dein Reiseplan</p>
+        <h2 className="mt-0.5 font-serif text-h2 text-content-onInverse">{plan.destination}</h2>
+        <div className="mt-2 flex flex-wrap gap-2 text-caption font-medium">
           {startDate && endDate && (
-            <span className="rounded-full bg-pm-cream/20 px-3 py-1">
+            <span className="rounded-chip bg-pm-cream px-3 py-1 text-content-heading">
               📅 {startDate} – {endDate}
             </span>
           )}
           {plan.budget !== null && (
-            <span className="rounded-full bg-pm-cream/20 px-3 py-1">
+            <span className="rounded-chip bg-pm-cream px-3 py-1 text-content-heading">
               💶 ca.{" "}
               {new Intl.NumberFormat("de-DE", {
                 style: "currency",
@@ -84,14 +82,14 @@ export function TripCard({ plan }: TripCardProps) {
         </div>
       </div>
 
-      <div className="p-5">
-        {plan.summary && <p className="text-sm leading-relaxed">{plan.summary}</p>}
+      <div className="p-card">
+        {plan.summary && <p className="text-body leading-relaxed text-content-body">{plan.summary}</p>}
 
         <div className="mt-5 flex flex-col gap-6">
           {days.map((day) => (
-            <div key={day} className="relative border-l-2 border-pm-sand pl-5">
-              <span className="absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 border-pm-cream bg-pm-orange" />
-              <h3 className="text-sm font-bold uppercase tracking-wide text-pm-orange">
+            <div key={day} className="relative border-l-2 border-hairline pl-5">
+              <span className="absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 border-surface-card bg-accent-primary" />
+              <h3 className="text-caption font-bold uppercase tracking-label text-accent-primary">
                 Tag {day}
               </h3>
               <ul className="mt-2 flex flex-col gap-2">
