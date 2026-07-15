@@ -4,7 +4,7 @@
 > Jede KI-Session und jeder Entwickler liest diese Datei **vor** der ersten Code-Änderung.
 > Wird die Architektur geändert, **muss** diese Datei im selben Commit aktualisiert werden.
 
-**Version:** 1.8.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
+**Version:** 1.11.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
 
 ---
 
@@ -182,15 +182,23 @@ frontend/src/
 - TypeScript strict. Kein `any`.
 - **UI-Shell (Design-Export „Web-App"):** Helle Fläche (`--surface-page` = `--pm-cream`) plus
   **linke Sidebar** (sticky, weiß, 240 px / unter `lg` 76 px Icon-Rail) mit Logo (→ Start),
-  Navigation (Suche, Gebuchte Reisen, Profil, Einstellungen; aktiv = Sage-Pill) und
-  „Chat starten"-CTA (Orange). Rechts davon je ein Screen aus `pages/`, geschaltet über
-  lokalen State in `App.tsx` (persistiert in `localStorage["pm_web_screen"]`, kein Router).
-- **Screens:** `StartPage` (Hero mit Freitext-Promptbox + Vorschlags-Chips → startet Chat),
-  `ChatPage` (Spalte max. 760 px: `Bubble`-Kette, Status-/Fehlerkarten, `ProposalCard`s nach
-  dem Clarify-Loop, `TripCard` auf-/zuklappbar („Buch"-Animation `pm-book-open`), sticky
-  `Composer` — nach Plan-Erstellung als Änderungs-Eingabe; ab `xl` rechts ein sticky
-  Weltkarten-Panel `TripMap` (react-leaflet + OSM-Tiles, Pins als `divIcon` mit Token-Farben);
-  ohne Session ein Empty-State mit Composer),
+  Navigation (Suche, Gebuchte Reisen, Profil, Einstellungen; aktiv = Sage-Pill), einem
+  **immer sichtbaren Konto-Status** (Avatar mit Initial/Gast-Icon + Status-Punkt +
+  „Angemeldet"/„Nicht angemeldet", Klick → Profil) und „Chat starten"-CTA (Orange). Rechts
+  davon je ein Screen aus `pages/`, geschaltet über lokalen State in `App.tsx` — **jeder
+  Seitenaufruf startet auf dem Start-Screen** (bewusst keine Screen-Persistenz).
+- **Screens:** `StartPage` (Hero mit Freitext-Promptbox + Vorschlags-Chips → startet Chat;
+  darunter eine beim Scrollen einblendende **Inspirations-Sektion**: kuratierte Ziele mit
+  Unsplash-Foto, redaktioneller ★-Bewertung und Klick-Start in den Chat — Reveal über
+  `useInView`/IntersectionObserver),
+  `ChatPage` (**Chat als Fenster**: Karte mit Kopfleiste [Migo-Logo, Online-Punkt, „＋ Neue
+  Reise"], intern scrollendem Verlauf und Eingabeleiste unten, Höhe `100vh−48px`;
+  Nutzer-Nachrichten mit Avatar rechts [Initial bzw. Gast-Icon]; `ProposalCard`s nach dem
+  Clarify-Loop, `TripCard` auf-/zuklappbar („Buch"-Animation `pm-book-open`), Composer nach
+  Plan-Erstellung als Änderungs-Eingabe; ab `xl` rechts ein sticky Weltkarten-Panel `TripMap`
+  — **immer sichtbar**: startet in der Weltansicht und fliegt animiert (`flyTo`/`flyToBounds`)
+  zu den Pins, sobald Vorschläge/Plan Koordinaten liefern (react-leaflet + OSM-Tiles, Pins
+  als `divIcon` mit Token-Farben); ohne Session ein Empty-State mit Composer),
   `SearchPage` (Suchfeld + Multi-Select-`Chip`s → startet Chat mit Keywords), `TripsPage`
   (Pläne der Sitzung als Karten mit „Entwurf"-Badge, aufklappbare `TripCard`), `ProfilePage`
   (Gast-Platzhalter + Sitzungs-Statistiken, Auth folgt), `SettingsPage` (lokale Einstellungen,
@@ -310,6 +318,9 @@ aktuell gehalten; neue Schema-Änderungen bekommen eine neue Revision unter
 
 | Datum | Version | Änderung | Autor |
 |---|---|---|---|
+| 2026-07-15 | 1.11.0 | Dynamische Unsplash-Fotos überall, wo Reise-Beispiele auftauchen: `TripCard` mit Ziel-Foto-Banner, Beispiel-Karten (statt Chips) im Chat-Empty-State, Vorschau-Foto in der Such-Auswahl (Eingabe 500 ms debounced). Item-Ebene bewusst ohne Fotos (Unsplash-Demo-Limit 50 Req/h) | Team |
+| 2026-07-15 | 1.10.0 | Karte im Chat immer sichtbar (Weltansicht → animiertes `flyToBounds` bei neuen Zielen, Marker memoisiert), Chat-Fenster mit kräftigerem Rahmen (`border-2 border-hairline`), `Footer`-Komponente (Impressum/Datenschutz als ehrliche Platzhalter-Modals, Kontakt-Mailto) auf allen Screens außer Chat | Team |
+| 2026-07-15 | 1.9.0 | Chat als Fenster (Kopfleiste + interner Scroll + Eingabeleiste), User-Avatar an eigenen Nachrichten, Konto-Status permanent in der Sidebar, Start-Screen bei jedem Laden (Screen-Persistenz entfernt), Inspirations-Sektion auf der Startseite (Scroll-Reveal via `useInView`, Unsplash-Fotos, redaktionelle Bewertungen) | Team |
 | 2026-07-15 | 1.8.0 | Vorschlags-Schritt PROPOSE (`POST /trips/proposals`, 3 kompakte Ideen in `conversations.state`), Compose mit `proposal_index` + Koordinaten (`trip_plans.lat/lon`, Migration 0002, Item-Koordinaten im Payload), Unsplash-Bilder-Proxy (`services/images.py`, `GET /images`, `UNSPLASH_ACCESS_KEY`), Frontend: Vorschlags-Karten mit Fotos, Weltkarten-Panel (Leaflet/OSM) rechts im Chat, „Buch"-Auf-/Zuklappen für Reisepläne | Team |
 | 2026-07-15 | 1.7.0 | Plan-Revision per Dialog: `POST /trips/{id}/revise` + `prompts/revise.md` (voller Plan-Rewrite, Items-Ersetzung mit Leerlauf-Schutz, History-Fortschreibung), Flow-Schritt 7 REVISE, Frontend-Composer nach Plan aktiv (revise statt clarify), Plan-Upsert in Sitzungsliste | Team |
 | 2026-07-15 | 1.6.0 | Auth-Flow: `/auth/register|login|me` (bcrypt + JWT), `CurrentUser`/`OptionalUser`-Dependencies, Conversation-Ownership inkl. Gast-Claim, `GET /trips`-Listing pro User, Alembic eingeführt (Lifespan migriert statt `create_all`, `users.password_hash`), Frontend: `useAuth` + Login/Registrierung in `ProfilePage`, Token-Interceptor, server-backed `TripsPage` | Team |

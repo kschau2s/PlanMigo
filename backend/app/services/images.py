@@ -1,10 +1,10 @@
 """Unsplash photo search — the only place that talks to the Unsplash API.
 
 The access key stays server-side (Settings). Results are cached in-memory per
-query because the Unsplash demo tier allows only 50 requests/hour.
+query because the Unsplash demo tier allows only 50 requests/hour — display-only
+hotlinking with attribution, no download pings (they count against the quota).
 """
 
-import asyncio
 import logging
 import time
 
@@ -51,25 +51,9 @@ async def search_photo(query: str) -> Photo | None:
                     author_url=result["user"]["links"]["html"],
                     source_url=result["links"]["html"],
                 )
-                # Unsplash API guideline: report usage via the download endpoint.
-                download = result.get("links", {}).get("download_location")
-                if download:
-                    asyncio.create_task(_trigger_download(download))
     except (httpx.HTTPError, KeyError, ValueError) as exc:
         logger.warning("Unsplash lookup failed for %r: %s", query, exc)
         return None  # do not cache transient errors
 
     _cache[key] = (time.monotonic(), photo)
     return photo
-
-
-async def _trigger_download(download_location: str) -> None:
-    settings = get_settings()
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.get(
-                download_location,
-                headers={"Authorization": f"Client-ID {settings.UNSPLASH_ACCESS_KEY}"},
-            )
-    except httpx.HTTPError:
-        pass  # attribution ping only — never break the request path

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Footer } from "./components/Footer";
 import { Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
 import { usePlannerSession, type StartOptions } from "./hooks/usePlannerSession";
@@ -13,20 +14,9 @@ import { TripsPage } from "./pages/TripsPage";
 import type { Screen } from "./types/navigation";
 import type { TripPlan } from "./types/trip";
 
-const SCREEN_STORAGE_KEY = "pm_web_screen";
-const SCREENS: Screen[] = ["start", "chat", "suche", "reisen", "profil", "einstellungen"];
-
-function loadScreen(): Screen {
-  try {
-    const stored = localStorage.getItem(SCREEN_STORAGE_KEY);
-    return SCREENS.includes(stored as Screen) ? (stored as Screen) : "start";
-  } catch {
-    return "start";
-  }
-}
-
 function App() {
-  const [screen, setScreen] = useState<Screen>(loadScreen);
+  // Every page load starts on the start screen (no persisted screen state).
+  const [screen, setScreen] = useState<Screen>("start");
   const [plans, setPlans] = useState<TripPlan[]>([]);
   // Upsert: plan creation appends, a revision replaces the entry with the same id.
   const planner = usePlannerSession((plan) =>
@@ -39,14 +29,7 @@ function App() {
   const { settings, update, resetLocalData } = useSettings();
   const auth = useAuth();
 
-  const go = (next: Screen) => {
-    setScreen(next);
-    try {
-      localStorage.setItem(SCREEN_STORAGE_KEY, next);
-    } catch {
-      // Storage unavailable — navigation still works in-memory.
-    }
-  };
+  const go = (next: Screen) => setScreen(next);
 
   const startChat = (options: StartOptions) => {
     planner.startNew(options);
@@ -63,12 +46,18 @@ function App() {
 
   return (
     <div className="flex min-h-screen bg-surface-page">
-      <Sidebar active={screen} onNavigate={go} />
+      <Sidebar active={screen} user={auth.user} onNavigate={go} />
       <main className="flex min-w-0 flex-1 flex-col">
         {screen === "start" && (
-          <StartPage onStart={(message) => startChat({ message })} onExplore={() => go("suche")} />
+          <StartPage onStart={(message) => startChat({ message })} />
         )}
-        {screen === "chat" && <ChatPage planner={planner} onOpenTrips={() => go("reisen")} />}
+        {screen === "chat" && (
+          <ChatPage
+            planner={planner}
+            onOpenTrips={() => go("reisen")}
+            userInitial={auth.user ? auth.user.email.charAt(0) : null}
+          />
+        )}
         {screen === "suche" && <SearchPage onPlan={(keywords) => startChat({ keywords })} />}
         {screen === "reisen" && (
           <TripsPage
@@ -88,6 +77,8 @@ function App() {
         {screen === "einstellungen" && (
           <SettingsPage settings={settings} onUpdate={update} onResetLocal={handleResetLocal} />
         )}
+        {/* Footer auf allen Inhaltsseiten; der Chat füllt als Fenster den Viewport. */}
+        {screen !== "chat" && <Footer />}
       </main>
     </div>
   );

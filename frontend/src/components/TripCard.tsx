@@ -1,3 +1,4 @@
+import { usePhoto } from "../hooks/usePhoto";
 import type { TripItem, TripItemType, TripPlan } from "../types/trip";
 
 interface TripCardProps {
@@ -57,9 +58,28 @@ export function TripCard({ plan }: TripCardProps) {
   const days = Array.from(new Set(plan.items.map((item) => item.day))).sort((a, b) => a - b);
   const startDate = formatDate(plan.start_date);
   const endDate = formatDate(plan.end_date);
+  const photo = usePhoto(plan.destination);
 
   return (
     <section className="overflow-hidden rounded-card border border-card bg-surface-card shadow-card">
+      {photo.data && (
+        <div className="relative">
+          <img
+            src={photo.data.url}
+            alt={photo.data.alt}
+            loading="lazy"
+            className="h-44 w-full object-cover"
+          />
+          <a
+            href={photo.data.author_url}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute bottom-1 right-2 text-caption text-pm-white opacity-80 hover:opacity-100"
+          >
+            Foto: {photo.data.author} / Unsplash
+          </a>
+        </div>
+      )}
       <div className="bg-surface-inverse px-5 py-4 text-content-onInverse">
         <p className="pm-eyebrow text-content-onInverseMuted">✓ Dein Reiseplan</p>
         <h2 className="mt-0.5 font-serif text-h2 text-content-onInverse">{plan.destination}</h2>

@@ -3,7 +3,7 @@
 // Farben/Radien/Shadows ausschließlich über Tailwind-Tokens (pm-*, surface-*, content-*).
 
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { Send, UserRound } from "lucide-react";
 import logo from "../assets/planmigo-logo.svg";
 
 /* ───────────────────────────  Bubble  ─────────────────────────── */
@@ -12,21 +12,26 @@ interface BubbleProps {
   children: React.ReactNode;
   /** true = Nachricht des Nutzers (rechts, salbeigrün) */
   me?: boolean;
+  /** Initial des angemeldeten Nutzers für den Avatar (null = Gast-Icon). */
+  userInitial?: string | null;
 }
 
-export function Bubble({ children, me = false }: BubbleProps) {
+export function Bubble({ children, me = false, userInitial = null }: BubbleProps) {
   if (me) {
     return (
-      <div className="flex justify-end">
+      <div className="flex items-start justify-end gap-3">
         <div className="max-w-[80%] rounded-card rounded-tr-[4px] bg-accent-secondary px-4 py-3 text-body text-pm-white shadow-soft">
           {children}
         </div>
+        <span className="mt-0.5 grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-pm-sand text-caption font-bold uppercase text-content-heading shadow-soft">
+          {userInitial ? userInitial.charAt(0) : <UserRound size={16} strokeWidth={2.2} />}
+        </span>
       </div>
     );
   }
   return (
     <div className="flex items-start gap-3">
-      <img src={logo} alt="PlanMigo" className="mt-0.5 h-8 w-8 shrink-0" />
+      <img src={logo} alt="PlanMigo" className="mt-0.5 h-[34px] w-[34px] shrink-0" />
       <div className="max-w-[80%] rounded-card rounded-tl-[4px] bg-surface-card px-4 py-3 text-body text-content-body shadow-soft">
         {children}
       </div>

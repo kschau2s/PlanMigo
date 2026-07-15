@@ -6,6 +6,8 @@ import { Bubble } from "./Chat";
 interface ChatWindowProps {
   history: ChatEntry[];
   isSending: boolean;
+  /** Initial of the logged-in user for the avatar next to own messages. */
+  userInitial?: string | null;
 }
 
 function TypingIndicator() {
@@ -20,18 +22,19 @@ function TypingIndicator() {
   );
 }
 
-/** Message thread with auto-scroll. The composer is placed by the page below. */
-export function ChatWindow({ history, isSending }: ChatWindowProps) {
+/** Message thread with auto-scroll inside the chat window's scroll container. */
+export function ChatWindow({ history, isSending, userInitial = null }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // block "nearest" keeps the outer page still and scrolls only the window.
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [history, isSending]);
 
   return (
     <>
       {history.map((entry, index) => (
-        <Bubble key={index} me={entry.role === "user"}>
+        <Bubble key={index} me={entry.role === "user"} userInitial={userInitial}>
           {entry.content}
         </Bubble>
       ))}

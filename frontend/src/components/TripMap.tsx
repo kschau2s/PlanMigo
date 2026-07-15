@@ -11,6 +11,9 @@ export interface MapMarker {
   primary?: boolean;
 }
 
+const WORLD_CENTER: [number, number] = [25, 10];
+const WORLD_ZOOM = 2;
+
 // DivIcons styled via CSS classes so colors come from the design tokens.
 const primaryIcon = L.divIcon({
   className: "",
@@ -25,21 +28,26 @@ const secondaryIcon = L.divIcon({
   iconAnchor: [6, 6],
 });
 
-function FitBounds({ markers }: { markers: MapMarker[] }) {
+/** Flies to new markers (animated); returns to the world view when they clear. */
+function FlyToMarkers({ markers, signature }: { markers: MapMarker[]; signature: string }) {
   const map = useMap();
   useEffect(() => {
-    if (markers.length === 0) return;
+    if (markers.length === 0) {
+      map.flyTo(WORLD_CENTER, WORLD_ZOOM, { duration: 1.0 });
+      return;
+    }
     const bounds = L.latLngBounds(markers.map((m) => [m.lat, m.lon] as [number, number]));
     if (markers.length === 1) {
-      map.setView(bounds.getCenter(), 6);
+      map.flyTo(bounds.getCenter(), 6, { duration: 1.4 });
     } else {
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 10 });
+      map.flyToBounds(bounds, { padding: [40, 40], maxZoom: 10, duration: 1.4 });
     }
-  }, [map, markers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, signature]);
   return null;
 }
 
-/** World map (OpenStreetMap tiles) with the trip destinations pinned. */
+/** World map (OpenStreetMap tiles) — always visible; pins fly in as targets appear. */
 export function TripMap({ markers }: { markers: MapMarker[] }) {
   const valid = useMemo(
     () =>
@@ -52,15 +60,16 @@ export function TripMap({ markers }: { markers: MapMarker[] }) {
       ),
     [markers],
   );
-
-  if (valid.length === 0) return null;
+  const signature = valid.map((m) => `${m.lat},${m.lon}`).join("|");
 
   return (
     <div className="overflow-hidden rounded-card border border-card shadow-card">
       <MapContainer
-        center={[valid[0].lat, valid[0].lon]}
-        zoom={4}
+        center={WORLD_CENTER}
+        zoom={WORLD_ZOOM}
+        minZoom={2}
         scrollWheelZoom={false}
+        worldCopyJump
         className="h-[420px] w-full"
       >
         <TileLayer
@@ -76,7 +85,7 @@ export function TripMap({ markers }: { markers: MapMarker[] }) {
             <Popup>{marker.label}</Popup>
           </Marker>
         ))}
-        <FitBounds markers={valid} />
+        <FlyToMarkers markers={valid} signature={signature} />
       </MapContainer>
     </div>
   );

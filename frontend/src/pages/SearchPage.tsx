@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 
 import { Chip } from "../components/Chat";
+import { usePhoto } from "../hooks/usePhoto";
 
 interface SearchPageProps {
   /** Starts a new chat seeded with these keywords (Migo asks the first question). */
@@ -22,8 +23,16 @@ const SEARCH_CHIPS = [
 export function SearchPage({ onPlan }: SearchPageProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  // Debounced so typing doesn't fire an Unsplash request per keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 500);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const keywords = [...(query.trim() ? [query.trim()] : []), ...selected];
+  const photo = usePhoto(debouncedQuery || selected[0] || null);
 
   const toggle = (chip: string) =>
     setSelected((s) => (s.includes(chip) ? s.filter((c) => c !== chip) : [...s, chip]));
@@ -61,6 +70,23 @@ export function SearchPage({ onPlan }: SearchPageProps) {
         {keywords.length > 0 ? (
           <>
             <div className="pm-eyebrow">Deine Auswahl</div>
+            {photo.data && (
+              <div className="relative mt-3 overflow-hidden rounded-image">
+                <img
+                  src={photo.data.url}
+                  alt={photo.data.alt}
+                  className="h-44 w-full object-cover"
+                />
+                <a
+                  href={photo.data.author_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="absolute bottom-1 right-2 text-caption text-pm-white opacity-80 hover:opacity-100"
+                >
+                  Foto: {photo.data.author} / Unsplash
+                </a>
+              </div>
+            )}
             <p className="mt-3 text-cardTitle font-bold text-content-heading">
               {keywords.join(" · ")}
             </p>

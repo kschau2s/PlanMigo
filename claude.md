@@ -74,6 +74,142 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-07-15] — Dynamische Fotos für alle Reise-Beispiele
+
+**Typ:** Feature
+**Betroffen:** `frontend/src/components/TripCard.tsx`,
+`frontend/src/pages/{ChatPage,SearchPage}.tsx`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.11.0)
+
+### Was
+- **`TripCard`:** Ziel-Foto als Banner über dem Terrakotta-Header (via `usePhoto(destination)`,
+  lazy, mit Unsplash-Attribution) — wirkt in Chat und Reisen-Liste (aufgeklappt).
+- **Chat-Empty-State:** Die drei Text-Chips („Strand & Kultur …", „Roadtrip …",
+  „Wochenendtrip …") sind jetzt Karten mit Foto-Thumbnail (eigene englische Bildsuche pro
+  Beispiel) + Hover-Zoom; Klick startet wie zuvor den Chat.
+- **Suche:** Die „Deine Auswahl"-Karte zeigt ein Vorschau-Foto zum Suchbegriff (bzw. zum
+  ersten gewählten Chip). Die Eingabe ist **500 ms debounced**, damit nicht jeder Tastendruck
+  eine Unsplash-Anfrage auslöst (Demo-Limit 50 Req/h; Backend cacht zusätzlich 24 h).
+- Bewusst **ohne** Fotos: die einzelnen Tages-Items der Timeline (bis 14 Stück pro Plan
+  würden das Stunden-Kontingent sprengen) und reine Keyword-Chips.
+- Bereits zuvor bebildert: Start-Inspiration, Vorschlags-Karten, Reisen-Thumbnails.
+- **Quota-Fix in `services/images.py`:** Der Unsplash-Download-Ping wurde entfernt — er
+  verdoppelte den Anfrageverbrauch und hat während der Verifikation das 50/h-Demo-Limit
+  gesprengt (403; UI fiel korrekt auf die Platzhalter-Flächen zurück). Für reines Anzeigen
+  per Hotlink mit Attribution ist der Ping nicht erforderlich; falls Unsplash-Production-
+  Freigabe beantragt wird, ggf. gezielt wieder einführen.
+
+### Warum
+- Nutzeranfrage: „bei allen reise beispielen sollen auch bilder dabei sein … möglichst
+  dynamisch".
+
+### Auswirkungen
+- Neue Dependencies: keine. Neue Env-Vars: keine. Migrationen: keine. Breaking: nein.
+
+### Verifiziert
+- `tsc -b` + `vite build` fehlerfrei.
+- Playwright-E2E: Chat-Empty-State zeigt 3 Beispiel-Karten mit Unsplash-Fotos → Suche
+  „Marrakesch" zeigt debounced Vorschau-Foto → voller Flow bis zum Plan → `TripCard` mit
+  Foto-Banner über dem Header. Keine Page-Errors.
+
+## [2026-07-15] — Karte permanent offen + dynamische Pins, kräftigerer Chat-Rahmen, Footer
+
+**Typ:** Feature
+**Betroffen:** `frontend/src/components/{TripMap,Footer(neu)}.tsx`,
+`frontend/src/pages/ChatPage.tsx`, `frontend/src/App.tsx`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.10.0)
+
+### Was
+- **Karte immer offen:** `TripMap` rendert jetzt ab Chat-Start (Weltansicht, Zoom 2) statt
+  eines Platzhalter-Texts. Sobald Vorschläge/Plan Koordinaten liefern, fliegt die Karte
+  animiert zu den Pins (`flyTo`/`flyToBounds`, 1,4 s); werden die Ziele geleert (Neue Reise),
+  fliegt sie zurück zur Weltansicht. Marker in `ChatPage` per `useMemo` auf
+  `session.plan`/`session.proposals` stabilisiert + Koordinaten-Signatur als Effect-Key,
+  damit die Animation nur bei echten Zieländerungen läuft (nicht bei jedem Re-Render).
+- **Chat-Rahmen:** Fenster-Karte von `border border-card` auf `border-2 border-hairline`
+  (Sand) — deutlich sichtbarer, bleibt im Token-System.
+- **Footer:** Neue `Footer`-Komponente (©-Zeile + Impressum · Datenschutz · Kontakt) auf
+  allen Screens außer dem Chat (der füllt als Fenster den Viewport). Impressum/Datenschutz
+  öffnen ehrliche Platzhalter-Modals („wird vor dem öffentlichen Betrieb ergänzt";
+  Datenschutz beschreibt transparent den Ist-Datenfluss: Chat → Backend → OpenRouter,
+  bcrypt-Hash, lokale Settings, Unsplash/OSM). Kontakt als `mailto:`. Overlay-Dimmen über
+  separate `opacity-40`-Ebene (Tokens erlauben keine `/`-Modifier).
+
+### Warum
+- Nutzeranfragen: Karte soll immer offen sein und Pins dynamisch gesetzt bekommen; Chat
+  braucht einen sichtbareren Rahmen; unten soll (auch auf der Startseite) ein Balken mit
+  Impressum/Kontakt stehen.
+
+### Auswirkungen
+- Neue Dependencies: keine. Neue Env-Vars: keine. Migrationen: keine. Breaking: nein.
+
+### Verifiziert
+- `tsc -b` + `vite build` fehlerfrei.
+- Playwright-E2E: Startseite → Footer sichtbar, Impressum- und Datenschutz-Modal öffnen/
+  schließen → Chat gestartet → Leaflet-Karte sofort da (0 Pins, Hinweistext) → Clarify-
+  Dialog → Vorschläge → **3 Pins erscheinen dynamisch** (flyTo auf Südostasien per
+  Screenshot bestätigt). Keine Page-Errors.
+
+### Offen
+- [ ] Impressum-/Datenschutz-Texte sind Platzhalter — vor öffentlichem Betrieb durch echte
+  Anbieterkennzeichnung/Datenschutzerklärung ersetzen.
+
+## [2026-07-15] — Chat-Fenster, User-Avatare, Konto-Status, Start-Reset, Inspirations-Sektion
+
+**Typ:** Feature | Breaking
+**Betroffen:** `frontend/src/components/{Chat,ChatWindow,Sidebar}.tsx`,
+`frontend/src/pages/{ChatPage,StartPage}.tsx`, `frontend/src/hooks/useInView.ts` (neu),
+`frontend/src/App.tsx`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.9.0)
+
+### Was
+- **Chat als Fenster:** `ChatPage` rendert den Dialog jetzt in einer Fenster-Karte
+  (Höhe `100vh−48px`): Kopfleiste mit Migo-Logo, grünem Online-Punkt, „Dein KI-Reiseplaner"
+  und „＋ Neue Reise"; der Verlauf scrollt **innerhalb** des Fensters (Autoscroll mit
+  `block:"nearest"`, damit die Seite ruhig bleibt); Composer sitzt in einer festen
+  Eingabeleiste am Fensterboden. Vorschläge, Statuskarten und der (auf-/zuklappbare) Plan
+  leben im Fenster-Scrollbereich.
+- **User-Avatar:** Eigene Nachrichten haben rechts neben der Bubble einen Avatar —
+  Initial der E-Mail (angemeldet) bzw. `UserRound`-Icon (Gast). Migo-/User-Avatare auf
+  34 px fixiert (`h-8` wäre durch die Spacing-Tokens 64 px gewesen).
+- **Konto-Status immer sichtbar:** Sidebar zeigt über dem „Chat starten"-Button dauerhaft
+  Avatar + Status-Punkt (grün = angemeldet, taupe = Gast) + „{E-Mail}/Gast" +
+  „Angemeldet/Nicht angemeldet"; Klick führt zum Profil. Im Icon-Rail bleibt der Avatar
+  mit Punkt sichtbar (Tooltip).
+- **Start-Screen bei jedem Laden:** Screen-Persistenz (`localStorage["pm_web_screen"]`)
+  entfernt — die App startet immer auf der Start-Ansicht (identisch zum Klick aufs
+  PlanMigo-Logo).
+- **Inspirations-Sektion:** Unter dem Start-Hero (der jetzt den ersten Viewport füllt)
+  erscheinen beim Runterscrollen 9 kuratierte Reiseziele als Karten — Unsplash-Foto (mit
+  Attribution, Fallback Sand-Fläche), Tags, ★-Bewertung und „Mit Migo planen →" (startet
+  den Chat mit dem Ziel). Einblendung gestaffelt über `useInView`
+  (IntersectionObserver, One-Shot) + Tailwind-`delay-*`. Der Hero-Link heißt jetzt
+  „Lass dich inspirieren ↓" und scrollt zur Sektion. **Bewertungen sind redaktionelle
+  statische Werte** (es gibt kein Bewertungssystem) — bei Anschluss echter Quellen ersetzen.
+
+### Warum
+- Nutzeranfragen: Chat wie ein Fenster, Icon vor eigenen Nachrichten, Login-Status immer
+  sichtbar, Start immer auf der Startansicht, scrollbare Reise-Inspiration mit Bildern und
+  Bewertungen.
+
+### Auswirkungen
+- Neue Dependencies: keine. Neue Env-Vars: keine. Migrationen: keine.
+- Breaking: aktiver Screen überlebt den Reload nicht mehr (bewusst); `Sidebar` braucht
+  `user`-Prop, `ChatPage` `userInitial`, `StartPage` hat kein `onExplore` mehr.
+
+### Verifiziert
+- `tsc -b` + `vite build` fehlerfrei; Backend unverändert (pytest zuvor 28/28).
+- Playwright-E2E: alter `pm_web_screen="einstellungen"`-Key gesetzt → Reload → **Start-Hero
+  erscheint trotzdem** → Sidebar zeigt „Gast · Nicht angemeldet" → „Lass dich inspirieren" →
+  9 Bewertungs-Chips (4,5–4,9), 8/9 Unsplash-Fotos (1× Fallback-Fläche, korrekt) →
+  Klick „Lissabon" → Chat-**Fenster** mit Kopfleiste + User-Bubble „Plane mir eine Reise
+  nach Lissabon, Portugal" + Gast-Avatar → echte Migo-Antwort → Registrieren → Sidebar
+  zeigt E-Mail + „Angemeldet", Bubble-Avatar mit Initial → Abmelden → Status wechselt
+  zurück. Keine Page-Errors. Avatar-Größen per Screenshot nachgeprüft (34 px).
+
+### Offen
+- [ ] Bewertungen sind statisch-redaktionell — durch echte Quelle ersetzen, sobald verfügbar.
+
 ## [2026-07-15] — 3 Reisevorschläge + Weltkarte + echte Unsplash-Fotos
 
 **Typ:** Feature
@@ -125,11 +261,24 @@ Danach:
   OSM-Tiles brauchen Internet im Browser; ohne Netz bleibt die Karte leer (Panel zeigt Text).
 
 ### Verifiziert
-- (wird nach dem Testlauf dieses Eintrags ergänzt)
+- `pytest` im Container: **28/28 grün** (7 neue: 3 Images-Tests, 4 Proposals-Tests).
+- Migration `0001 → 0002` lief sauber auf der bestehenden DB; `tsc -b` + `vite build`
+  fehlerfrei (Bundle +160 kB durch Leaflet).
+- `GET /images?query=Bali` liefert mit dem echten Key ein Unsplash-Foto inkl. Attribution.
+- Playwright-E2E (1440 px, kompletter Flow): Promptbox → Clarify → **genau 3
+  Vorschlags-Karten** (Bali / Hoi An / Koh Lanta, alle mit echtem Unsplash-Foto +
+  „Foto: … / Unsplash") → Karte rechts zeigt 3 orange Ziel-Pins auf Südostasien →
+  „Diesen Plan ausarbeiten" (Bali) → Plan erstellt → **Buch-Toggle** zu-/aufklappen ok →
+  Karte zoomt auf Bali mit 19 Pins (Ziel + Stationen) → Reisen-Liste mit Foto-Thumbnail.
+  Keine Page-Errors. (Schönheitsfehler im Test-Screenshot: Buch-Animation wurde
+  mid-flight erwischt — kein UI-Problem.)
 
 ### Offen
 - [ ] Vorschläge überleben den Reload nicht im UI (liegen aber in `conversations.state`).
 - [ ] Kein „keiner davon gefällt mir"-Pfad — Composer ist während der Auswahl gesperrt.
+- [ ] E2E zeigte eine doppelte „Ich habe alles…"-Bubble: Der Test tippte im ms-Fenster
+  zwischen Ready-Antwort und Proposals-Sperre noch eine Antwort — für echte Nutzer
+  praktisch unerreichbar, ggf. Composer schon bei `ready_to_plan` sperren.
 
 ## [2026-07-15] — Plan-Revision im Chat: „Was soll Migo am Plan ändern?"
 
