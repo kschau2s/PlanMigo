@@ -1,7 +1,81 @@
-import { PlannerPage } from "./pages/PlannerPage";
+import { useState } from "react";
+
+import { Sidebar } from "./components/Sidebar";
+import { usePlannerSession, type StartOptions } from "./hooks/usePlannerSession";
+import { useSettings } from "./hooks/useSettings";
+import { ChatPage } from "./pages/ChatPage";
+import { ProfilePage } from "./pages/ProfilePage";
+import { SearchPage } from "./pages/SearchPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { StartPage } from "./pages/StartPage";
+import { TripsPage } from "./pages/TripsPage";
+import type { Screen } from "./types/navigation";
+import type { TripPlan } from "./types/trip";
+
+const SCREEN_STORAGE_KEY = "pm_web_screen";
+const SCREENS: Screen[] = ["start", "chat", "suche", "reisen", "profil", "einstellungen"];
+
+function loadScreen(): Screen {
+  try {
+    const stored = localStorage.getItem(SCREEN_STORAGE_KEY);
+    return SCREENS.includes(stored as Screen) ? (stored as Screen) : "start";
+  } catch {
+    return "start";
+  }
+}
 
 function App() {
-  return <PlannerPage />;
+  const [screen, setScreen] = useState<Screen>(loadScreen);
+  const [plans, setPlans] = useState<TripPlan[]>([]);
+  const planner = usePlannerSession((plan) => setPlans((existing) => [...existing, plan]));
+  const { settings, update, resetLocalData } = useSettings();
+
+  const go = (next: Screen) => {
+    setScreen(next);
+    try {
+      localStorage.setItem(SCREEN_STORAGE_KEY, next);
+    } catch {
+      // Storage unavailable — navigation still works in-memory.
+    }
+  };
+
+  const startChat = (options: StartOptions) => {
+    planner.startNew(options);
+    go("chat");
+  };
+
+  const handleResetLocal = () => {
+    resetLocalData();
+    planner.reset();
+    setPlans([]);
+    setScreen("start");
+  };
+
+  return (
+    <div className="flex min-h-screen bg-surface-page">
+      <Sidebar active={screen} onNavigate={go} />
+      <main className="flex min-w-0 flex-1 flex-col">
+        {screen === "start" && (
+          <StartPage onStart={(message) => startChat({ message })} onExplore={() => go("suche")} />
+        )}
+        {screen === "chat" && <ChatPage planner={planner} onOpenTrips={() => go("reisen")} />}
+        {screen === "suche" && <SearchPage onPlan={(keywords) => startChat({ keywords })} />}
+        {screen === "reisen" && (
+          <TripsPage
+            plans={plans}
+            planPending={planner.planPending}
+            onStartChat={() => go("chat")}
+          />
+        )}
+        {screen === "profil" && (
+          <ProfilePage plansCount={plans.length} activePlanning={planner.session !== null} />
+        )}
+        {screen === "einstellungen" && (
+          <SettingsPage settings={settings} onUpdate={update} onResetLocal={handleResetLocal} />
+        )}
+      </main>
+    </div>
+  );
 }
 
 export default App;

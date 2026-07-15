@@ -74,6 +74,84 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-07-15] — Web-App-Shell: Sidebar + 6 Screens (Design-Export „app.html")
+
+**Typ:** Feature | Breaking
+**Betroffen:** `frontend/src/App.tsx`, `frontend/src/components/{Sidebar(neu),Chat,ChatWindow}.tsx`,
+`frontend/src/pages/{StartPage,ChatPage,SearchPage,TripsPage,ProfilePage,SettingsPage}.tsx` (alle neu),
+`frontend/src/hooks/{usePlannerSession,useSettings}.ts` (neu), `frontend/src/types/navigation.ts` (neu),
+gelöscht: `pages/PlannerPage.tsx`, `components/KeywordPills.tsx`, `hooks/useKeywords.ts`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.5.0)
+
+### Was
+- Frontend vollständig auf den vom Nutzer gelieferten Design-Export „Web-App" (`app.html`)
+  umgebaut: **linke Sidebar** (weiß, sticky, 240 px; unter `lg` 76-px-Icon-Rail) mit Logo (→ Start),
+  Navigation Suche / Gebuchte Reisen / Profil / Einstellungen (aktiv = Sage-Pill) und
+  „Chat starten"-CTA (Orange). Screen-Umschaltung über State in `App.tsx`, aktiver Screen
+  persistiert in `localStorage["pm_web_screen"]` (wie im Export) — kein Router, keine neue Dependency.
+- **Sechs Screens** (`pages/`), an die reale Backend-Funktionalität angepasst statt statischer Mockups:
+  - `StartPage`: Hero mit Freitext-Promptbox (Enter/Senden startet den Chat mit dem Text als
+    erstem User-Turn — der Backend-Vertrag erlaubt das bereits), Vorschlags-Chips, Deko-Kreise
+    aus Token-Farben statt der nicht vorhandenen Bali-Fotos, Gradient `creamWarm→cream`.
+  - `ChatPage`: zentrierte Spalte (max. 760 px), `Bubble`-Kette, Fehler-/Lade-Karten, `TripCard`
+    inline nach Plan-Erstellung + „Zu deinen Reisen →", sticky `Composer`; ohne Session ein
+    Empty-State („Wovon träumst du?") mit Composer und Beispiel-Chips. „＋ Neue Reise" resettet.
+  - `SearchPage`: Suchfeld + Multi-Select-Chips → startet den Chat mit den gewählten Keywords
+    (statt des statischen Bali-Fake-Ergebnisses aus dem Export — es gibt keinen Such-Endpoint).
+  - `TripsPage`: Reisepläne der Sitzung als Karten („Entwurf"-Badge, aufklappbare `TripCard`),
+    Empty-State mit Chat-CTA; Hinweis, dass Buchung/Persistenz mit dem Konto-System folgen.
+  - `ProfilePage`: Gast-Platzhalter (Auth folgt) + echte Sitzungs-Statistiken (geplante Reisen,
+    aktive Planung) statt des fiktiven „Alex Krüger"-Profils.
+  - `SettingsPage`: Toggles/Selects funktional, persistiert in `localStorage["pm_settings"]`
+    (`useSettings`); „Konto löschen" aus dem Export ersetzt durch ehrliches
+    „Lokale Daten zurücksetzen" (mit Confirm). Klartext-Hinweis, dass alles nur lokal gespeichert wird.
+- **Session-State hochgezogen:** Chat-Logik aus `PlannerPage` in den Hook `usePlannerSession`
+  (App-Ebene) extrahiert — die Session überlebt Screen-Wechsel; fertige Pläne werden clientseitig
+  für `TripsPage`/`ProfilePage` gesammelt.
+- **Primitives ans Design angepasst:** Nutzer-`Bubble` jetzt Sage mit weißem Text (statt
+  Terrakotta), Ecken 18/4 px wie im Export; `Composer`-Send-Button Sage mit `greenDark`-Hover;
+  `Chip` mit Sage-Aktivzustand. `Nav`, `ChatLayout`, `TripPanel` (Topbar-Shell aus v1.4) entfernt.
+- Bugfix während der Verifikation: Settings-Toggle nutzte `h-7` — durch die Spacing-Tokens sind
+  das 48 px statt 28 px → explizit `h-[28px] w-[48px]`.
+
+### Warum
+- Nutzer hat den neuen Design-Export „Web-App" (Sidebar-Shell mit Start/Suche/Reisen/Profil/
+  Einstellungen/Chat) geliefert mit der Vorgabe, ihn vollständig und **nutzbar** umzusetzen.
+  Statische Mockup-Inhalte (Fake-Suchtreffer, fiktives Profil, gebuchte Bali-Reise) wurden auf
+  die tatsächlich vorhandene Backend-Funktionalität abgebildet, statt tote UI auszuliefern.
+
+### Auswirkungen
+- Neue Dependencies: keine (Icons weiterhin `lucide-react`, Navigation ohne Router).
+- Neue Env-Vars: keine. (`.env` fehlte im Repo und wurde lokal aus `.env.example` neu erzeugt —
+  der frühere echte OpenRouter-Key ist nicht mehr vorhanden; für echte LLM-Antworten ggf. Key
+  eintragen.)
+- Migrationen: keine.
+- Breaking: Topbar-`Nav`/`ChatLayout`-Shell und `KeywordPills`/`useKeywords` entfernt; Keyword-
+  Pill-Eingabe auf der Startseite durch Freitext-Promptbox ersetzt (Keywords laufen jetzt über
+  die Suche). `localStorage`-Keys `pm_web_screen`/`pm_settings` neu.
+
+### Verifiziert
+- `tsc -b` + `vite build`: fehlerfrei (Node 24 jetzt lokal installiert).
+- `docker compose up -d --build db backend frontend`: alle Container up, Health `200`.
+- Playwright (lokal, Chromium) gegen den Docker-Stack — Navigations-Suite: Start-Hero →
+  Suche (Query „Bali" + Chips Strand/Kultur → „Mit PlanMigo planen") → Chat mit Keyword-Pills
+  und echter Migo-Antwort → „＋ Neue Reise" → Chat-Empty-State → Reisen-Empty-State → Profil →
+  Einstellungen (Toggle umschalten, Reload: Setting **und** aktiver Screen persistiert) →
+  Start-Promptbox startet Chat mit User-Bubble → 900-px-Viewport zeigt Icon-Rail.
+  Keine Console-/Page-Errors.
+- Kern-Flow-Suite end-to-end grün: Start-Promptbox („Eine Woche Strand und Kultur auf Bali für
+  1.500 €") → 5 Clarify-Turns mit echten Migo-Antworten → Plan-Compose → `TripCard` „Bali,
+  Indonesien" (01.–07.09.2026, 16 Items, 7-Tage-Timeline) inline im Chat → „Zu deinen Reisen" →
+  Plan in `TripsPage` als Entwurfs-Karte aufklappbar. Keine Page-Errors.
+  (Bemerkenswert: OpenRouter antwortete mit dem Beispiel-Key aus `.env.example` mit 200 —
+  vermutlich Free-Tier des Modells; für den Produktivbetrieb trotzdem echten Key setzen.)
+
+### Offen
+- [ ] Sprache/Währung in den Einstellungen werden gespeichert, aber noch nicht angewendet
+  (Backend antwortet Deutsch, Preise EUR) — bei Bedarf an Backend/`TripCard` anbinden.
+- [ ] `TripsPage`/`ProfilePage` zeigen nur Sitzungsdaten — `GET /conversations`/`GET /trips`-
+  Listing-Endpoints + Persistenz über Reload hinaus fehlen weiterhin.
+
 ## [2026-07-15] — Design-System: Struktur-Umbau auf Nav/ChatLayout + Farbkorrektur
 
 **Typ:** Feature | Fix

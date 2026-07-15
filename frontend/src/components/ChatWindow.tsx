@@ -1,13 +1,11 @@
 import { useEffect, useRef } from "react";
 
 import type { ChatEntry } from "../types/chat";
-import { Bubble, Composer } from "./Chat";
+import { Bubble } from "./Chat";
 
 interface ChatWindowProps {
   history: ChatEntry[];
-  onSend: (message: string) => void;
   isSending: boolean;
-  disabled?: boolean;
 }
 
 function TypingIndicator() {
@@ -22,7 +20,8 @@ function TypingIndicator() {
   );
 }
 
-export function ChatWindow({ history, onSend, isSending, disabled = false }: ChatWindowProps) {
+/** Message thread with auto-scroll. The composer is placed by the page below. */
+export function ChatWindow({ history, isSending }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,7 +37,6 @@ export function ChatWindow({ history, onSend, isSending, disabled = false }: Cha
       ))}
       {isSending && <TypingIndicator />}
       <div ref={bottomRef} />
-      <Composer onSend={onSend} disabled={isSending || disabled} />
     </>
   );
 }

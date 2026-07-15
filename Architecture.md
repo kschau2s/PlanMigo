@@ -4,7 +4,7 @@
 > Jede KI-Session und jeder Entwickler liest diese Datei **vor** der ersten Code-Änderung.
 > Wird die Architektur geändert, **muss** diese Datei im selben Commit aktualisiert werden.
 
-**Version:** 1.4.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
+**Version:** 1.5.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
 
 ---
 
@@ -137,14 +137,14 @@ async def complete(
 ### 4.1 Ordner
 ```
 frontend/src/
-├── components/   # Präsentational, zustandslos wo möglich (ChatWindow, TripCard, KeywordPills, …)
-│                 # Chat.tsx: geteilte Design-System-Primitives (Nav, Bubble, Chip, QuestionCard,
-│                 # Composer, TripPanel, ChatLayout)
-├── pages/        # Routen-Ebene
-├── hooks/        # useChat, useTripPlan, useKeywords
+├── components/   # Präsentational, zustandslos wo möglich (Sidebar, ChatWindow, TripCard)
+│                 # Chat.tsx: geteilte Design-System-Primitives (Bubble, Chip, QuestionCard, Composer)
+├── pages/        # Ein Screen pro Datei: StartPage, ChatPage, SearchPage, TripsPage,
+│                 # ProfilePage, SettingsPage — geschaltet über App.tsx (kein Router im MVP)
+├── hooks/        # useChat, useTripPlan, usePlannerSession, useSettings
 ├── api/client.ts # Axios-Instanz, baseURL = VITE_API_URL
 ├── assets/       # SVG/Bild-Assets (z.B. planmigo-logo.svg)
-├── types/        # TS-Typen, gespiegelt aus Pydantic-Schemas
+├── types/        # TS-Typen, gespiegelt aus Pydantic-Schemas (+ navigation.ts: Screen)
 └── styles/tokens.css
 ```
 
@@ -156,13 +156,22 @@ frontend/src/
 - Server-State: TanStack Query. Kein Redux.
 - Styling: Tailwind, Farben ausschließlich über Theme-Tokens (`bg-surface-card`, `text-accent-primary`, …).
 - TypeScript strict. Kein `any`.
-- **UI-Shell:** Helle Fläche (`--surface-page` = `--pm-cream`) als App-Hintergrund, fixe `Nav`-
-  Topbar (Logo + Wortmarke). Kein Slide-Übergang mehr: Vor dem Start eine zentrierte Keyword-
-  Hero-Section, danach `ChatLayout` — zweispaltig, `Bubble`-Kette + `Composer` links, rechts
-  sticky ein Vorschlags-Panel (Platzhalter, dann `TripCard`). `PlannerPage` hält genau eine
-  aktive `ChatSession` (`types/chat.ts`); kein persistenter Verlauf mehrerer Reisen im UI (kann
-  bei Bedarf als Dropdown/Popover im `Nav` ergänzt werden, sobald ein Auth-/Listing-Endpoint
-  existiert).
+- **UI-Shell (Design-Export „Web-App"):** Helle Fläche (`--surface-page` = `--pm-cream`) plus
+  **linke Sidebar** (sticky, weiß, 240 px / unter `lg` 76 px Icon-Rail) mit Logo (→ Start),
+  Navigation (Suche, Gebuchte Reisen, Profil, Einstellungen; aktiv = Sage-Pill) und
+  „Chat starten"-CTA (Orange). Rechts davon je ein Screen aus `pages/`, geschaltet über
+  lokalen State in `App.tsx` (persistiert in `localStorage["pm_web_screen"]`, kein Router).
+- **Screens:** `StartPage` (Hero mit Freitext-Promptbox + Vorschlags-Chips → startet Chat),
+  `ChatPage` (zentrierte Spalte max. 760 px: `Bubble`-Kette, Status-/Fehlerkarten, `TripCard`
+  inline nach Plan-Erstellung, sticky `Composer`; ohne Session ein Empty-State mit Composer),
+  `SearchPage` (Suchfeld + Multi-Select-`Chip`s → startet Chat mit Keywords), `TripsPage`
+  (Pläne der Sitzung als Karten mit „Entwurf"-Badge, aufklappbare `TripCard`), `ProfilePage`
+  (Gast-Platzhalter + Sitzungs-Statistiken, Auth folgt), `SettingsPage` (lokale Einstellungen,
+  `localStorage["pm_settings"]` via `useSettings`).
+- **Session-State:** `usePlannerSession` (Hook auf App-Ebene) hält genau eine aktive
+  `ChatSession` (`types/chat.ts`) inkl. Pending-/Fehler-Flags und sammelt erstellte `TripPlan`s
+  clientseitig für `TripsPage`/`ProfilePage` — kein Backend-Listing-Endpoint vorhanden,
+  Sitzungsdaten überleben keinen Reload.
 
 ### 4.3 Farb-Tokens (`styles/tokens.css`)
 
@@ -195,8 +204,10 @@ Spacing- (`--space-1…8`, `--card-pad`), Radius- (`--radius-card/chip/button/im
 plus `borderColor`, `fontFamily`, `fontSize`, `letterSpacing`, `borderRadius`, `boxShadow`, `spacing`,
 `transitionTimingFunction`/`transitionDuration` — alle als `var(--token)`-Referenzen, nie als Hex-Literal.
 
-Geteilte UI-Primitives (`components/Chat.tsx`): `Nav`, `Bubble`, `Chip`, `QuestionCard`, `Composer`,
-`TripPanel`, `ChatLayout` — nutzen ausschließlich die obigen Tokens.
+Geteilte UI-Primitives (`components/Chat.tsx`): `Bubble`, `Chip`, `QuestionCard`, `Composer` —
+nutzen ausschließlich die obigen Tokens. Nutzer-Bubbles, aktive Chips/Nav-Items und Send-Buttons
+sind Sage (`--accent-secondary`), Primär-CTAs Orange (`--accent-primary`) — wie im Design-Export
+„Web-App". (`Nav`, `TripPanel`, `ChatLayout` aus v1.3/1.4 sind mit der Sidebar-Shell entfallen.)
 
 **Achtung Tailwind-Opacity-Modifier:** Da alle Farb-Utilities auf `var(--token)` (nicht auf Literal-Hex)
 zeigen, funktionieren Klassen wie `bg-pm-cream/20` nicht (Tailwind kann aus einer CSS-Variable keinen
@@ -255,6 +266,7 @@ Tabellen werden beim Backend-Start per `Base.metadata.create_all` angelegt (Life
 
 | Datum | Version | Änderung | Autor |
 |---|---|---|---|
+| 2026-07-15 | 1.5.0 | UI-Shell auf Design-Export „Web-App" umgebaut: linke Sidebar (Start/Suche/Reisen/Profil/Einstellungen + „Chat starten") statt Nav-Topbar, sechs Screens in `pages/` mit State-basiertem Switching, `usePlannerSession`/`useSettings`-Hooks, `Nav`/`TripPanel`/`ChatLayout`/`KeywordPills`/`useKeywords` entfernt, Nutzer-Bubbles & Send-Buttons auf Sage | Team |
 | 2026-07-15 | 1.4.0 | UI-Shell strukturell auf den Design-Export umgebaut: `Nav`+`ChatLayout` statt Sidebar+Slide-Übergang, `ChatWindow` nur noch Bubble-Kette+Composer, `Sidebar.tsx` entfernt, Mehrfach-Chat-Verwaltung im UI entfällt. `--surface-page` von `--pm-orange` auf `--pm-cream` korrigiert (Original-Tokens-Export) | Team |
 | 2026-07-14 | 1.3.0 | Design-System-Integration: `tokens.css`/`tailwind.config.js` auf 13-Ton-Basis-Palette + semantische Aliases erweitert, geteilte UI-Primitives `components/Chat.tsx` (Nav, Bubble, Chip, QuestionCard, Composer, TripPanel, ChatLayout), bestehende Komponenten (Sidebar, PlannerPage, ChatWindow, TripCard, KeywordPills) auf die neuen Tokens umgestellt (Funktionalität unverändert) | Team |
 | 2026-07-14 | 1.2.0 | UI-Shell mit Sidebar + Slide-Übergang, clientseitige Chat-Sessions, `complete()`-Timeout-Parameter (Compose 300 s), nginx `proxy_read_timeout` 360 s | Team |
