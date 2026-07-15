@@ -3,3 +3,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Map pins (Leaflet divIcons) — colors strictly via tokens. */
+.pm-map-pin {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--pm-sage);
+  border: 2px solid var(--pm-white);
+  box-shadow: var(--shadow-soft);
+}
+.pm-map-pin-primary {
+  background: var(--pm-orange);
+}
+
+/* "Book" opening animation for plan/proposal cards. */
+@keyframes pm-book-open {
+  from {
+    transform: perspective(1400px) rotateX(-35deg);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(1400px) rotateX(0);
+    opacity: 1;
+  }
+}
+.pm-book-open {
+  transform-origin: top center;
+  animation: pm-book-open 450ms var(--ease-brand);
+}

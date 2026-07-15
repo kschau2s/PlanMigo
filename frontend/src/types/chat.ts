@@ -1,4 +1,4 @@
-import type { TripPlan } from "./trip";
+import type { TripPlan, TripProposal } from "./trip";
 
 export interface ChatRequest {
   conversation_id: string | null;
@@ -24,6 +24,8 @@ export interface ChatSession {
   keywords: string[];
   conversationId: string | null;
   history: ChatEntry[];
+  /** Compact destination proposals shown after the clarify loop. */
+  proposals: TripProposal[] | null;
   plan: TripPlan | null;
   lastMessage: string;
 }

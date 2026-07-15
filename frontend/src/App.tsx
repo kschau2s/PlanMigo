@@ -28,7 +28,14 @@ function loadScreen(): Screen {
 function App() {
   const [screen, setScreen] = useState<Screen>(loadScreen);
   const [plans, setPlans] = useState<TripPlan[]>([]);
-  const planner = usePlannerSession((plan) => setPlans((existing) => [...existing, plan]));
+  // Upsert: plan creation appends, a revision replaces the entry with the same id.
+  const planner = usePlannerSession((plan) =>
+    setPlans((existing) =>
+      existing.some((p) => p.id === plan.id)
+        ? existing.map((p) => (p.id === plan.id ? plan : p))
+        : [...existing, plan],
+    ),
+  );
   const { settings, update, resetLocalData } = useSettings();
   const auth = useAuth();
 

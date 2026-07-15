@@ -7,7 +7,13 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import CurrentUser, DBSession, OptionalUser
 from app.models.conversation import Conversation
 from app.models.trip_plan import TripPlan
-from app.schemas.trip import TripPlanOut, TripPlanRequest
+from app.schemas.trip import (
+    TripPlanOut,
+    TripPlanRequest,
+    TripProposalsRequest,
+    TripProposalsResponse,
+    TripReviseRequest,
+)
 from app.services import planner
 from app.services.openrouter import LLMServiceError
 
@@ -24,6 +30,40 @@ async def create_trip_plan(
         raise HTTPException(status_code=404, detail="Conversation not found") from exc
     except LLMServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/trips/proposals", response_model=TripProposalsResponse)
+async def create_trip_proposals(
+    request: TripProposalsRequest, db: DBSession, user: OptionalUser
+) -> TripProposalsResponse:
+    try:
+        proposals = await planner.generate_trip_proposals(
+            db, request.conversation_id, user_id=user.id if user else None
+        )
+    except planner.ConversationAccessError as exc:
+        raise HTTPException(status_code=404, detail="Conversation not found") from exc
+    except LLMServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if proposals is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return TripProposalsResponse(proposals=proposals)
+
+
+@router.post("/trips/{trip_id}/revise", response_model=TripPlanOut)
+async def revise_trip_plan(
+    trip_id: uuid.UUID, request: TripReviseRequest, db: DBSession, user: OptionalUser
+) -> TripPlan:
+    try:
+        plan = await planner.revise_trip_plan(
+            db, trip_id, request.message, user_id=user.id if user else None
+        )
+    except planner.ConversationAccessError as exc:
+        raise HTTPException(status_code=404, detail="Trip plan not found") from exc
+    except LLMServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Trip plan not found")
+    return plan
 
 
 @router.get("/trips", response_model=list[TripPlanOut])

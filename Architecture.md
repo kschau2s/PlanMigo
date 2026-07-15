@@ -4,7 +4,7 @@
 > Jede KI-Session und jeder Entwickler liest diese Datei **vor** der ersten Code-Änderung.
 > Wird die Architektur geändert, **muss** diese Datei im selben Commit aktualisiert werden.
 
-**Version:** 1.6.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
+**Version:** 1.8.0 · **Stand:** 2026-07-15 · **Owner:** Marco Martins (CTO)
 
 ---
 
@@ -78,14 +78,17 @@ backend/
     │   ├── router.py  # APIRouter-Aggregat
     │   ├── auth.py    # POST /auth/register, POST /auth/login, GET /auth/me
     │   ├── chat.py    # POST /chat (optionale Auth)
-    │   ├── trips.py   # POST /trips/plan, GET /trips (Auth), GET /trips/{id}
+    │   ├── images.py  # GET /images?query= (Unsplash-Proxy, Key nur serverseitig)
+    │   ├── trips.py   # POST /trips/plan, POST /trips/proposals, POST /trips/{id}/revise,
+    │   │              # GET /trips (Auth), GET /trips/{id}
     │   ├── search.py  # POST /search/{flights,stays,activities}
     │   └── health.py  # GET /health
     ├── services/
     │   ├── openrouter.py  # LLM-Client (einziger Ort mit OpenRouter-Wissen)
-    │   ├── planner.py     # Dialogsteuerung + Planaufbau
+    │   ├── planner.py     # Dialogsteuerung + Vorschläge + Planaufbau + Revision
+    │   ├── images.py      # Unsplash-Suche (einziger Ort mit Unsplash-Wissen, In-Memory-Cache)
     │   ├── travel_api.py  # Amadeus / Booking / GetYourGuide Adapter
-    │   └── prompts/       # System-Prompts als .md/.txt
+    │   └── prompts/       # clarify / proposals / compose / revise als .md
     ├── models/            # SQLAlchemy: User, Conversation, TripPlan, TripItem
     ├── schemas/           # Pydantic: auth.py, chat.py, trip.py, search.py
     └── core/
@@ -147,8 +150,8 @@ async def complete(
 | Tabelle | Felder (Auszug) |
 |---|---|
 | `users` | id, email, password_hash (bcrypt, nullable für Alt-Zeilen), created_at |
-| `conversations` | id, user_id (nullable — Gäste; wird nach Login geclaimt), keywords[], state (JSONB), created_at |
-| `trip_plans` | id, conversation_id, destination, start_date, end_date, budget, summary |
+| `conversations` | id, user_id (nullable — Gäste; wird nach Login geclaimt), keywords[], state (JSONB: history + proposals), created_at |
+| `trip_plans` | id, conversation_id, destination, start_date, end_date, budget, summary, lat, lon |
 | `trip_items` | id, trip_plan_id, type (flight/stay/activity/restaurant), payload (JSONB), day, order |
 
 ---
@@ -183,8 +186,11 @@ frontend/src/
   „Chat starten"-CTA (Orange). Rechts davon je ein Screen aus `pages/`, geschaltet über
   lokalen State in `App.tsx` (persistiert in `localStorage["pm_web_screen"]`, kein Router).
 - **Screens:** `StartPage` (Hero mit Freitext-Promptbox + Vorschlags-Chips → startet Chat),
-  `ChatPage` (zentrierte Spalte max. 760 px: `Bubble`-Kette, Status-/Fehlerkarten, `TripCard`
-  inline nach Plan-Erstellung, sticky `Composer`; ohne Session ein Empty-State mit Composer),
+  `ChatPage` (Spalte max. 760 px: `Bubble`-Kette, Status-/Fehlerkarten, `ProposalCard`s nach
+  dem Clarify-Loop, `TripCard` auf-/zuklappbar („Buch"-Animation `pm-book-open`), sticky
+  `Composer` — nach Plan-Erstellung als Änderungs-Eingabe; ab `xl` rechts ein sticky
+  Weltkarten-Panel `TripMap` (react-leaflet + OSM-Tiles, Pins als `divIcon` mit Token-Farben);
+  ohne Session ein Empty-State mit Composer),
   `SearchPage` (Suchfeld + Multi-Select-`Chip`s → startet Chat mit Keywords), `TripsPage`
   (Pläne der Sitzung als Karten mit „Entwurf"-Badge, aufklappbare `TripCard`), `ProfilePage`
   (Gast-Platzhalter + Sitzungs-Statistiken, Auth folgt), `SettingsPage` (lokale Einstellungen,
@@ -256,16 +262,27 @@ eigenen (soliden) Token verwenden.
 ## 6. Der Planungs-Flow (Kern-Use-Case)
 
 ```
-1. INPUT      Nutzer gibt Schlagwörter ein         → POST /trips/plan (initial)
+1. INPUT      Nutzer gibt Schlagwörter/Freitext ein
 2. CLARIFY    planner.py generiert per LLM Rückfragen (Akinator-Stil)
               → Loop über POST /chat, State in conversations.state
-3. SEARCH     Bei ausreichendem Kontext: travel_api.py sucht parallel
-              Flüge · Unterkünfte · Aktivitäten
-4. COMPOSE    LLM erhält Suchergebnisse und komponiert daraus einen
-              strukturierten Plan (JSON, response_format=json_object)
-5. PERSIST    trip_plans + trip_items in Postgres
-6. RENDER     Frontend rendert TripCard-Timeline
+3. PROPOSE    POST /trips/proposals: LLM liefert genau 3 kompakte Reisevorschläge
+              (Ziel, Zeitraum, Budget-Schätzung, 3 Highlights, lat/lon, image_query)
+              → in conversations.state["proposals"] gespeichert, als Karten gerendert
+4. SEARCH     Bei Auswahl: travel_api.py sucht parallel Flüge · Unterkünfte · Aktivitäten
+5. COMPOSE    POST /trips/plan mit proposal_index: LLM arbeitet GENAU den gewählten
+              Vorschlag aus (JSON inkl. lat/lon auf Plan- und Item-Ebene)
+6. PERSIST    trip_plans (mit lat/lon) + trip_items in Postgres
+7. RENDER     Frontend rendert TripCard-Timeline (auf-/zuklappbar, „Buch"-Animation)
+              + Weltkarte (Leaflet/OSM) rechts mit allen Zielen/Stationen
+8. REVISE     Optionaler Loop: Freitext-Änderungswunsch → POST /trips/{id}/revise
+              (prompts/revise.md: aktueller Plan als JSON + Dialog-Historie +
+              Wunsch → vollständiger aktualisierter Plan; Items werden ersetzt,
+              nie geleert; Wunsch+Bestätigung landen in conversations.state)
 ```
+
+Im Frontend bleibt der Chat-Composer nach der Plan-Erstellung aktiv
+(„Was soll Migo am Plan ändern?") — Änderungswünsche laufen über denselben Chat-Verlauf,
+die `TripCard` und die Reisen-Liste aktualisieren sich in-place (Upsert per Plan-ID).
 
 ---
 
@@ -293,6 +310,8 @@ aktuell gehalten; neue Schema-Änderungen bekommen eine neue Revision unter
 
 | Datum | Version | Änderung | Autor |
 |---|---|---|---|
+| 2026-07-15 | 1.8.0 | Vorschlags-Schritt PROPOSE (`POST /trips/proposals`, 3 kompakte Ideen in `conversations.state`), Compose mit `proposal_index` + Koordinaten (`trip_plans.lat/lon`, Migration 0002, Item-Koordinaten im Payload), Unsplash-Bilder-Proxy (`services/images.py`, `GET /images`, `UNSPLASH_ACCESS_KEY`), Frontend: Vorschlags-Karten mit Fotos, Weltkarten-Panel (Leaflet/OSM) rechts im Chat, „Buch"-Auf-/Zuklappen für Reisepläne | Team |
+| 2026-07-15 | 1.7.0 | Plan-Revision per Dialog: `POST /trips/{id}/revise` + `prompts/revise.md` (voller Plan-Rewrite, Items-Ersetzung mit Leerlauf-Schutz, History-Fortschreibung), Flow-Schritt 7 REVISE, Frontend-Composer nach Plan aktiv (revise statt clarify), Plan-Upsert in Sitzungsliste | Team |
 | 2026-07-15 | 1.6.0 | Auth-Flow: `/auth/register|login|me` (bcrypt + JWT), `CurrentUser`/`OptionalUser`-Dependencies, Conversation-Ownership inkl. Gast-Claim, `GET /trips`-Listing pro User, Alembic eingeführt (Lifespan migriert statt `create_all`, `users.password_hash`), Frontend: `useAuth` + Login/Registrierung in `ProfilePage`, Token-Interceptor, server-backed `TripsPage` | Team |
 | 2026-07-15 | 1.5.0 | UI-Shell auf Design-Export „Web-App" umgebaut: linke Sidebar (Start/Suche/Reisen/Profil/Einstellungen + „Chat starten") statt Nav-Topbar, sechs Screens in `pages/` mit State-basiertem Switching, `usePlannerSession`/`useSettings`-Hooks, `Nav`/`TripPanel`/`ChatLayout`/`KeywordPills`/`useKeywords` entfernt, Nutzer-Bubbles & Send-Buttons auf Sage | Team |
 | 2026-07-15 | 1.4.0 | UI-Shell strukturell auf den Design-Export umgebaut: `Nav`+`ChatLayout` statt Sidebar+Slide-Übergang, `ChatWindow` nur noch Bubble-Kette+Composer, `Sidebar.tsx` entfernt, Mehrfach-Chat-Verwaltung im UI entfällt. `--surface-page` von `--pm-orange` auf `--pm-cream` korrigiert (Original-Tokens-Export) | Team |

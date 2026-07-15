@@ -2,8 +2,28 @@ import { useState } from "react";
 import { MapPin } from "lucide-react";
 
 import { TripCard } from "../components/TripCard";
+import { usePhoto } from "../hooks/usePhoto";
 import { useMyTrips } from "../hooks/useTripPlan";
 import type { TripPlan } from "../types/trip";
+
+function TripThumb({ destination }: { destination: string }) {
+  const photo = usePhoto(destination);
+  if (photo.data) {
+    return (
+      <img
+        src={photo.data.thumb_url}
+        alt={photo.data.alt}
+        title={`Foto: ${photo.data.author} / Unsplash`}
+        className="h-20 w-20 shrink-0 rounded-image object-cover"
+      />
+    );
+  }
+  return (
+    <div className="grid h-20 w-20 shrink-0 place-items-center rounded-image bg-pm-sandLight">
+      <MapPin size={32} strokeWidth={1.8} className="text-pm-terracotta" />
+    </div>
+  );
+}
 
 interface TripsPageProps {
   /** Plans created in this browser session (also covers guests). */
@@ -83,9 +103,7 @@ export function TripsPage({ sessionPlans, planPending, loggedIn, onStartChat }: 
               className="mt-6 overflow-hidden rounded-card border border-card bg-surface-card shadow-card"
             >
               <div className="flex flex-col gap-4 p-card sm:flex-row sm:items-center">
-                <div className="grid h-20 w-20 shrink-0 place-items-center rounded-image bg-pm-sandLight">
-                  <MapPin size={32} strokeWidth={1.8} className="text-pm-terracotta" />
-                </div>
+                <TripThumb destination={plan.destination} />
                 <div className="min-w-0 flex-1">
                   <div className="pm-eyebrow">
                     {start && end ? `${start} – ${end}` : "Entwurf aus deinem Chat"}
@@ -118,7 +136,9 @@ export function TripsPage({ sessionPlans, planPending, loggedIn, onStartChat }: 
               </div>
               {isOpen && (
                 <div className="border-t border-card bg-surface-page p-4">
-                  <TripCard plan={plan} />
+                  <div className="pm-book-open">
+                    <TripCard plan={plan} />
+                  </div>
                 </div>
               )}
             </article>

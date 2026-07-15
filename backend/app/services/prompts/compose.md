@@ -7,6 +7,8 @@ Dialog mit dem Nutzer:
 {history}
 
 Zusätzliche Antworten: {answers}
+Vom Nutzer gewählter Reisevorschlag (falls vorhanden, arbeite GENAU dieses Ziel aus):
+{selected_proposal}
 Suchergebnisse aus Reise-APIs (können leer sein — dann schlage selbst realistische, real
 existierende Orte, Unterkünfte, Aktivitäten und Restaurants vor): {search_results}
 
@@ -17,6 +19,8 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Struktur:
   "start_date": "YYYY-MM-DD",
   "end_date": "YYYY-MM-DD",
   "budget": 1500,
+  "lat": -8.41,
+  "lon": 115.19,
   "summary": "2–3 Sätze auf Deutsch, warum dieser Plan zu den Wünschen passt.",
   "items": [
     {{
@@ -28,7 +32,9 @@ Antworte AUSSCHLIESSLICH mit validem JSON in exakt dieser Struktur:
         "description": "1–2 Sätze auf Deutsch",
         "location": "Ort/Adresse",
         "time": "z.B. 09:30 oder vormittags",
-        "price": "z.B. 120 € p.P."
+        "price": "z.B. 120 € p.P.",
+        "lat": -8.65,
+        "lon": 115.13
       }}
     }}
   ]
@@ -41,3 +47,6 @@ Regeln:
 - Anreise (flight) an Tag 1, Unterkunft (stay) einmal pro Aufenthalt, dazu Aktivitäten und Restaurants.
 - Alle Texte in "payload" auf Deutsch. Keine erfundenen Buchungscodes oder Preise als Fakten —
   Preise als grobe Schätzung kennzeichnen ("ca.").
+- "lat"/"lon" auf oberster Ebene: Koordinaten des Reiseziels als Dezimalzahlen. In "payload"
+  pro Item die Koordinaten des jeweiligen Ortes (weglassen, wenn unbekannt — nie raten über
+  Landesgrenzen hinweg).

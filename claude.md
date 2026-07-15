@@ -74,6 +74,112 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-07-15] — 3 Reisevorschläge + Weltkarte + echte Unsplash-Fotos
+
+**Typ:** Feature
+**Betroffen:** `backend/app/services/{images(neu),planner}.py`,
+`backend/app/services/prompts/{proposals(neu),compose,revise}.md`,
+`backend/app/schemas/{image(neu),trip}.py`, `backend/app/api/v1/{images(neu),trips,router}.py`,
+`backend/app/models/trip_plan.py`, `backend/alembic/versions/0002_trip_plan_coordinates.py` (neu),
+`backend/app/config.py`, `backend/tests/{test_images,test_trips_proposals}.py` (neu),
+`frontend/src/components/{TripMap,ProposalCard}.tsx` (neu),
+`frontend/src/{api/{images(neu),trips}.ts,hooks/{usePhoto(neu),useTripPlan,usePlannerSession}.ts}`,
+`frontend/src/types/{image(neu),trip,chat}.ts`, `frontend/src/pages/{ChatPage,TripsPage}.tsx`,
+`frontend/src/styles/index.css`, `frontend/package.json`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.8.0, Flow-Schritte PROPOSE/RENDER erweitert)
+
+### Was
+- **Mehrere Vorschläge:** Nach dem Clarify-Loop ruft das Frontend `POST /trips/proposals` auf
+  (statt sofort den teuren Compose): `prompts/proposals.md` liefert genau 3 kompakte, klar
+  unterschiedliche Reiseideen (Ziel, Zeitraum, Budget-Schätzung, 3 Highlights, `lat`/`lon`,
+  englische `image_query`) in Sekunden. Sie liegen in `conversations.state["proposals"]`;
+  `POST /trips/plan` nimmt `proposal_index` und der Compose-Prompt arbeitet GENAU den gewählten
+  Vorschlag aus. UI: `ProposalCard`s mit Foto, Highlights und „Diesen Plan ausarbeiten →";
+  Composer ist während der Auswahl gesperrt (Entscheidung per Karte).
+- **Weltkarte rechts:** `TripMap` (react-leaflet + OpenStreetMap-Tiles, ab `xl` sticky rechts
+  im Chat) zeigt die Vorschlags-Ziele bzw. nach Plan-Erstellung Ziel + alle Stationen.
+  Koordinaten kommen vom LLM: `trip_plans.lat/lon` (Migration `0002`) und pro Item im
+  JSONB-Payload. Pins als Leaflet-`divIcon` mit CSS-Klassen → Farben ausschließlich Tokens
+  (Ziel = Orange, Stationen = Sage). Plausibilitätsfilter (±90/±180) gegen Halluzinationen.
+- **Echte Bilder:** `services/images.py` ist der einzige Ort mit Unsplash-Wissen
+  (`UNSPLASH_ACCESS_KEY` nur in `.env`; Demo-Limit 50 Req/h → 24-h-In-Memory-Cache pro Query;
+  Unsplash-Guideline: Download-Ping + Attribution). `GET /images?query=` liefert
+  `{photo|null}` — Frontend (`usePhoto`, staleTime ∞) zeigt Fotos in `ProposalCard`s und als
+  Thumbnails in der Reisen-Liste, mit „Foto: … / Unsplash"-Attribution; Fallback bleibt das
+  Icon-Quadrat.
+- **„Wie ein Buch":** Reisepläne lassen sich im Chat auf-/zuklappen (`BookOpen`-Toggle) und
+  öffnen sich mit einer 3D-Klapp-Animation (`pm-book-open`, rotateX + `--ease-brand`) — auch
+  beim Aufklappen in der Reisen-Liste.
+
+### Warum
+- Nutzeranfragen: echte Bilder (Unsplash-Key geliefert), mehrere Vorschläge mit Buch-Auf/Zu,
+  Weltkarte rechts mit den Zielen. Der Vorschlags-Schritt spart zudem Zeit/Kosten, weil der
+  minutenlange Compose nur noch für die gewählte Option läuft.
+
+### Auswirkungen
+- Neue Dependencies (Frontend): `leaflet` + `react-leaflet@4` (Weltkarte; 4.x wegen React 18)
+  und `@types/leaflet` (dev). Backend: keine (Unsplash über vorhandenes `httpx`).
+- Neue Env-Vars: `UNSPLASH_ACCESS_KEY` (in `.env` gesetzt, `.env.example` ergänzt).
+- Migrationen: `0002_trip_plan_coordinates` (lat/lon, idempotent geguardet).
+- Breaking: nein — `proposal_index` ist optional, ohne ihn komponiert Migo wie bisher selbst.
+  OSM-Tiles brauchen Internet im Browser; ohne Netz bleibt die Karte leer (Panel zeigt Text).
+
+### Verifiziert
+- (wird nach dem Testlauf dieses Eintrags ergänzt)
+
+### Offen
+- [ ] Vorschläge überleben den Reload nicht im UI (liegen aber in `conversations.state`).
+- [ ] Kein „keiner davon gefällt mir"-Pfad — Composer ist während der Auswahl gesperrt.
+
+## [2026-07-15] — Plan-Revision im Chat: „Was soll Migo am Plan ändern?"
+
+**Typ:** Feature
+**Betroffen:** `backend/app/services/prompts/revise.md` (neu), `backend/app/services/planner.py`,
+`backend/app/schemas/trip.py`, `backend/app/api/v1/trips.py`,
+`backend/tests/test_trips_revise.py` (neu), `frontend/src/api/trips.ts`,
+`frontend/src/hooks/{useTripPlan,usePlannerSession}.ts`, `frontend/src/pages/ChatPage.tsx`,
+`frontend/src/App.tsx`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.7.0, Flow-Schritt 7 REVISE)
+
+### Was
+- **Backend:** `POST /trips/{trip_id}/revise` (`TripReviseRequest{message}`, 1–2000 Zeichen) →
+  `planner.revise_trip_plan`: lädt Plan + Items + Conversation (Ownership-Check wie überall,
+  fremde Pläne → 404), baut `prompts/revise.md` mit aktuellem Plan als JSON, Dialog-Historie
+  und Änderungswunsch, verlangt den **vollständigen** aktualisierten Plan im Compose-Schema
+  (unveränderte Teile explizit beibehalten). Items werden transaktional ersetzt — aber nie
+  geleert, wenn das Modell keine verwertbaren Items liefert. Wunsch + Migo-Bestätigung werden
+  in `conversations.state.history` fortgeschrieben, damit Folge-Änderungen den Kontext haben.
+  Timeout/Token-Budget wie Compose (300 s / 4000), LLM-Fehler → 503.
+  Bugfix aus der Verifikation: `db.expire(plan)` vor dem Reload machte auch `plan.id`
+  ungeladen → synchroner Lazy-Load → `MissingGreenlet`/500; die ID wird jetzt vor dem
+  Expire gelesen.
+- **Frontend:** Nach der Plan-Erstellung bleibt der Chat-Composer aktiv (Platzhalter „Was soll
+  Migo am Plan ändern?") und sendet an den Revise-Endpoint statt an den Clarify-Chat.
+  Änderungswunsch erscheint als User-Bubble, Erfolgsbestätigung als Migo-Bubble; eigene
+  Pending-Karte („Migo überarbeitet deinen Reiseplan …") und Fehler-Karte mit Retry (Bubble
+  des fehlgeschlagenen Wunschs wird vor dem Retry dedupliziert). `TripCard` im Chat, die
+  Sitzungsliste (Upsert per Plan-ID statt Anhängen) und `["my-trips"]` aktualisieren sich.
+
+### Warum
+- Nutzeranfrage: Nach der Plan-Erstellung soll der Plan im Dialog mit der KI änderbar sein.
+
+### Auswirkungen
+- Neue Dependencies: keine. Neue Env-Vars: keine. Migrationen: keine (nutzt bestehende Tabellen).
+- Breaking: nein. (Der Composer ist nach Plan-Erstellung nicht mehr deaktiviert — gewollt.)
+
+### Verifiziert
+- `pytest` im Container: **21/21 grün** (5 neue Revise-Tests: 200 mit aktualisiertem Plan,
+  404 unbekannt, 404 fremd, 503 LLM-Fehler, 422 leere Message).
+- `tsc -b` + `vite build` fehlerfrei.
+- Playwright-E2E gegen den Docker-Stack: Plan „Bali" erstellen → Revise-Composer aktiv →
+  „Ersetze alle Aktivitäten an Tag 3 durch einen ganztägigen Surfkurs in Canggu" →
+  Pending-Karte → Bestätigungs-Bubble → Surfkurs steht in der `TripCard` **und** in der
+  Reisen-Liste (weiterhin genau 1 Karte, kein Duplikat). Keine Page-Errors.
+
+### Offen
+- [ ] Revision erzeugt keine Versionshistorie (alter Stand ist weg) — bei Bedarf
+  `trip_plan_revisions`-Tabelle.
+
 ## [2026-07-15] — Auth-Flow: Registrierung, Login, eigene Reisen-Liste + Alembic
 
 **Typ:** Feature

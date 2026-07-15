@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     CORS_ORIGIN_REGEX: str | None = r"https://.*\.app\.github\.dev"
     SECRET_KEY: str = "change-me"
 
+    # --- Unsplash (destination photos) ---
+    UNSPLASH_ACCESS_KEY: str = ""
+
     # --- Travel APIs ---
     AMADEUS_API_KEY: str = ""
     AMADEUS_API_SECRET: str = ""
