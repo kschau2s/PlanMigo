@@ -10,3 +10,8 @@ export async function getTripPlan(tripId: string): Promise<TripPlan> {
   const { data } = await apiClient.get<TripPlan>(`/trips/${tripId}`);
   return data;
 }
+
+export async function listMyTrips(): Promise<TripPlan[]> {
+  const { data } = await apiClient.get<TripPlan[]>("/trips/mine");
+  return data;
+}

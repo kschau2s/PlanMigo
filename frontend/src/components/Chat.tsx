@@ -2,22 +2,67 @@
 // 1:1 aus dem Claude-Design-Export "Web-Dialog" übersetzt.
 // Farben/Radien/Shadows ausschließlich über Tailwind-Tokens (pm-*, surface-*, content-*).
 
+import { LogOut, User as UserIcon } from "lucide-react";
 import { useState } from "react";
 import { Send } from "lucide-react";
+import { Link } from "react-router-dom";
+
 import logo from "../assets/planmigo-logo.svg";
+import { AuthModal } from "./AuthModal";
+import { useAuth } from "../hooks/useAuth";
 
 /* ─────────────────────────────  Nav  ───────────────────────────── */
 
 export function Nav() {
+  const { user, isLoading, logout } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   return (
-    <header className="border-b border-hairline bg-surface-page">
-      <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-6 py-4">
-        <img src={logo} alt="" className="h-8 w-8" />
-        <span className="font-serif text-cardTitle font-bold tracking-headline">
-          <span className="text-pm-terracotta">Plan</span>
-          <span className="text-pm-sage">Migo</span>
-        </span>
+    <header className="bg-surface-page">
+      <div className="flex items-center gap-2 px-4 py-3">
+        <Link to="/" className="flex items-center gap-2">
+          <img src={logo} alt="" className="h-6 w-6" />
+          <span className="font-serif text-body font-bold tracking-headline">
+            <span className="text-pm-terracotta">Plan</span>
+            <span className="text-pm-sage">Migo</span>
+          </span>
+        </Link>
+
+        <div className="ml-auto flex items-center gap-2">
+          {!isLoading && user && (
+            <Link
+              to="/trips"
+              title="Meine Reisen"
+              className="flex items-center gap-1 rounded-button px-2 py-1.5 text-caption font-semibold text-content-muted transition-colors duration-quick ease-brand hover:text-accent-primary"
+            >
+              Reisen
+            </Link>
+          )}
+
+          {!isLoading &&
+            (user ? (
+              <button
+                type="button"
+                onClick={logout}
+                title={`${user.email} — Abmelden`}
+                className="flex items-center gap-1 rounded-button border border-card px-2 py-1.5 text-caption font-semibold text-content-body transition-colors duration-quick ease-brand hover:border-accent-secondary hover:text-accent-secondary"
+              >
+                <UserIcon size={13} />
+                <LogOut size={13} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAuthModalOpen(true)}
+                className="rounded-button bg-accent-primary px-3 py-1.5 text-caption font-semibold text-pm-white transition-opacity duration-quick ease-brand hover:opacity-90"
+              >
+                Anmelden
+              </button>
+            ))}
+        </div>
       </div>
+
+      {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
     </header>
   );
 }
@@ -203,24 +248,6 @@ export function TripPanel({ image, title, subtitle, stops, onOpen }: TripPanelPr
           Reise ansehen …
         </button>
       </div>
-    </div>
-  );
-}
-
-/* ────────────────────────  ChatLayout  ─────────────────────── */
-
-/** Zweispaltiges Layout: Dialog links, Reisevorschlag rechts. */
-export function ChatLayout({
-  chat,
-  panel,
-}: {
-  chat: React.ReactNode;
-  panel?: React.ReactNode;
-}) {
-  return (
-    <div className="mx-auto grid max-w-[1200px] gap-6 px-6 py-8 lg:grid-cols-[1fr_380px]">
-      <main className="flex flex-col gap-5">{chat}</main>
-      {panel && <aside className="lg:sticky lg:top-8 lg:self-start">{panel}</aside>}
     </div>
   );
 }

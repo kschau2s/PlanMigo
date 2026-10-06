@@ -41,3 +41,7 @@ Regeln:
 - Anreise (flight) an Tag 1, Unterkunft (stay) einmal pro Aufenthalt, dazu Aktivitäten und Restaurants.
 - Alle Texte in "payload" auf Deutsch. Keine erfundenen Buchungscodes oder Preise als Fakten —
   Preise als grobe Schätzung kennzeichnen ("ca.").
+- Falls unter "Zusätzliche Antworten" ein Feld "selected_flight" mit Flugdaten (Airline, Ziel,
+  Preis) enthalten ist: Passt das dortige Ziel zum finalen Reiseziel, übernimm Airline und Preis
+  unverändert für den Anreise-Flug an Tag 1. Passt das Ziel nicht mehr, nutze den genannten Preis
+  trotzdem als realistische Preisorientierung für den Flug zum tatsächlichen Ziel.

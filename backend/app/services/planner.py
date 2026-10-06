@@ -28,14 +28,18 @@ VALID_ITEM_TYPES = {t.value for t in TripItemType}
 
 
 async def next_clarifying_turn(
-    db: AsyncSession, conversation_id: uuid.UUID | None, keywords: list[str], user_message: str
+    db: AsyncSession,
+    conversation_id: uuid.UUID | None,
+    keywords: list[str],
+    user_message: str,
+    user_id: uuid.UUID | None = None,
 ) -> tuple[Conversation, str, bool]:
     conversation = None
     if conversation_id is not None:
         conversation = await db.get(Conversation, conversation_id)
 
     if conversation is None:
-        conversation = Conversation(keywords=keywords, state={"history": []})
+        conversation = Conversation(keywords=keywords, state={"history": []}, user_id=user_id)
         db.add(conversation)
         await db.flush()
 
@@ -93,9 +97,12 @@ async def build_trip_plan(db: AsyncSession, request: TripPlanRequest) -> TripPla
     )
 
     # Composing the full plan JSON can take minutes on slower models.
+    # Reasoning disabled: reasoning models otherwise burn the entire max_tokens
+    # budget on hidden chain-of-thought and return no JSON content at all.
     response = await openrouter.complete(
         messages=[ChatMessage(role="user", content=prompt)],
         response_format={"type": "json_object"},
+        reasoning={"enabled": False},
         max_tokens=4000,
         timeout_seconds=300.0,
     )
@@ -138,18 +145,7 @@ async def _load_plan_with_items(db: AsyncSession, trip_plan_id: uuid.UUID) -> Tr
 
 
 def _parse_plan_json(content: str) -> dict:
-    text = content.strip()
-    # Some models wrap JSON in markdown fences despite response_format.
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, flags=re.DOTALL)
-    if fence:
-        text = fence.group(1)
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise openrouter.LLMServiceError(f"LLM returned invalid plan JSON: {exc}") from exc
-    if not isinstance(data, dict):
-        raise openrouter.LLMServiceError("LLM plan JSON is not an object")
-    return data
+    return openrouter.parse_json_object(content)
 
 
 def _parse_date(value: object) -> date | None:

@@ -1,13 +1,11 @@
 import { useEffect, useRef } from "react";
 
 import type { ChatEntry } from "../types/chat";
-import { Bubble, Composer } from "./Chat";
+import { Bubble } from "./Chat";
 
-interface ChatWindowProps {
+interface ChatMessagesProps {
   history: ChatEntry[];
-  onSend: (message: string) => void;
   isSending: boolean;
-  disabled?: boolean;
 }
 
 function TypingIndicator() {
@@ -22,7 +20,8 @@ function TypingIndicator() {
   );
 }
 
-export function ChatWindow({ history, onSend, isSending, disabled = false }: ChatWindowProps) {
+/** Scrollable message list — lives in a frame's body slot, Composer stays in its footer. */
+export function ChatMessages({ history, isSending }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,7 +29,7 @@ export function ChatWindow({ history, onSend, isSending, disabled = false }: Cha
   }, [history, isSending]);
 
   return (
-    <>
+    <div className="flex flex-col gap-4 p-4">
       {history.map((entry, index) => (
         <Bubble key={index} me={entry.role === "user"}>
           {entry.content}
@@ -38,7 +37,6 @@ export function ChatWindow({ history, onSend, isSending, disabled = false }: Cha
       ))}
       {isSending && <TypingIndicator />}
       <div ref={bottomRef} />
-      <Composer onSend={onSend} disabled={isSending || disabled} />
-    </>
+    </div>
   );
 }

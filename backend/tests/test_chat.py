@@ -30,7 +30,7 @@ def db_override():
 async def test_chat_returns_reply(client, monkeypatch):
     conversation = Conversation(id=uuid.uuid4(), keywords=["Berge"], state={"history": []})
 
-    async def fake_turn(db, conversation_id, keywords, user_message):
+    async def fake_turn(db, conversation_id, keywords, user_message, user_id=None):
         return conversation, "Wann möchtest du verreisen?", False
 
     monkeypatch.setattr(planner, "next_clarifying_turn", fake_turn)
@@ -48,7 +48,7 @@ async def test_chat_returns_reply(client, monkeypatch):
 async def test_chat_signals_ready_to_plan(client, monkeypatch):
     conversation = Conversation(id=uuid.uuid4(), keywords=[], state={"history": []})
 
-    async def fake_turn(db, conversation_id, keywords, user_message):
+    async def fake_turn(db, conversation_id, keywords, user_message, user_id=None):
         return conversation, planner.READY_REPLY, True
 
     monkeypatch.setattr(planner, "next_clarifying_turn", fake_turn)
@@ -59,7 +59,7 @@ async def test_chat_signals_ready_to_plan(client, monkeypatch):
 
 
 async def test_chat_maps_llm_error_to_503(client, monkeypatch):
-    async def fake_turn(db, conversation_id, keywords, user_message):
+    async def fake_turn(db, conversation_id, keywords, user_message, user_id=None):
         raise LLMServiceError("OpenRouter down")
 
     monkeypatch.setattr(planner, "next_clarifying_turn", fake_turn)

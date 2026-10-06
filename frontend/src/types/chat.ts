@@ -1,5 +1,3 @@
-import type { TripPlan } from "./trip";
-
 export interface ChatRequest {
   conversation_id: string | null;
   keywords: string[];
@@ -24,6 +22,5 @@ export interface ChatSession {
   keywords: string[];
   conversationId: string | null;
   history: ChatEntry[];
-  plan: TripPlan | null;
   lastMessage: string;
 }

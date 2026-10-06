@@ -6,6 +6,10 @@ sqlalchemy[asyncio]==2.0.35
 asyncpg==0.29.0
 httpx==0.27.2
 python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+# passlib 1.7.4 predates bcrypt 4.1's stricter 72-byte check and crashes on its self-test
+# (ValueError: password cannot be longer than 72 bytes) — pin the last compatible bcrypt.
+bcrypt==4.0.1
 python-dotenv==1.0.1
 
 pytest==8.3.3

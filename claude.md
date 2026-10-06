@@ -74,6 +74,347 @@ Danach:
 
 > Neueste Einträge oben.
 
+## [2026-10-05] — Chat zweispaltig: Zielkarte rechts, wächst mit jeder Antwort
+
+**Typ:** Feature
+**Betroffen:** `backend/app/{schemas/destination.py,services/destinations.py,services/prompts/destinations.md,api/v1/destinations.py,api/v1/router.py}`,
+`backend/tests/test_destinations.py`,
+`frontend/src/{pages/PlannerPage.tsx,components/DestinationMap.tsx,hooks/useDestinations.ts,api/destinations.ts,types/destination.ts}`,
+`frontend/package.json`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.8.0)
+
+### Was
+- Neuer Endpoint `POST /destinations/suggest` (`{conversation_id, keywords}` →
+  `{destinations: [{id, name, country, lat, lng, reason}]}`). `services/destinations.py` lädt den
+  Conversation-Verlauf (denselben, den `planner.py` nutzt) und lässt das LLM 3–5 real
+  existierende Ziele mit geografisch korrekten Koordinaten vorschlagen
+  (`reasoning: {"enabled": false}`, `response_format: json_object` — dasselbe Muster wie
+  `flights.py`). Keine Geocoding-API nötig, Koordinaten gängiger Reiseziele sind zuverlässiges
+  Modellwissen; Einträge ohne parsbare `lat`/`lng` werden verworfen.
+- Frontend: neue Dependency `react-leaflet` + `leaflet` (OpenStreetMap-Tiles, **kein API-Key**
+  nötig — bewusst statt Google Maps/Mapbox, um keinen Billing-Key im Code/`.env` zu brauchen,
+  siehe Regel „Keine Secrets im Code"). `components/DestinationMap.tsx` rendert die Marker und
+  zoomt die Karte per `FitBounds`-Helper automatisch auf alle aktuell bekannten Ziele.
+  Leaflets Standard-Marker-Icon-URLs werden von Vite nicht automatisch aufgelöst — die PNGs
+  werden explizit importiert und via `L.Icon.Default.mergeOptions(...)` gesetzt (ohne `any`,
+  siehe Typ-Workaround in der Datei).
+- `PlannerPage.tsx`: Der Chat-Schritt zeigt jetzt **zwei** `PhoneFrame`s nebeneinander — links
+  unverändert der Chat, rechts ein neuer Frame mit der Karte. Nach **jeder** erfolgreichen
+  `POST /chat`-Antwort (außer bei `ready_to_plan`) wird zusätzlich `POST /destinations/suggest`
+  aufgerufen und das Ergebnis **additiv** in den lokalen State gemerged (Dedup über
+  `name`+`country`, klein geschrieben) — bestehende Marker bleiben erhalten, neue kommen hinzu.
+  Start-Schritt (Keywords) und Plan-Schritt (vollständiger Reiseplan) bleiben unverändert bei
+  einem einzelnen `PhoneFrame`.
+
+### Warum
+- Nutzerwunsch: „der start soll so bleiben. nach der ersten eingabe soll das chat fenster auf
+  der linken seite sein, rechts soll eine map gezeigt werden mit möglichen zielen die nach jeder
+  eingabe auf mögliche ziele ergänzt wird."
+
+### Auswirkungen
+- Neue Dependencies: `leaflet`, `react-leaflet`, `@types/leaflet` (Dev) — Lockfile per
+  Einweg-`node:20-slim`-Container regeneriert.
+- Neue Env-Vars: keine (OpenStreetMap-Tiles sind öffentlich, kein Key). Migrationen: keine.
+- Breaking: nein.
+
+### Verifiziert
+- `pytest` im `backend`-Container: 26/26 grün (neu: `test_destinations.py`).
+- `tsc -b && vite build`: fehlerfrei.
+- Direkt per `curl` gegen Backend/OpenRouter geprüft: `POST /destinations/suggest` liefert
+  geografisch korrekte Koordinaten (z. B. Zermatt 46.0207/7.7491).
+- End-to-End per Playwright (Chromium-Container im `planmigo-net`): Chat-Schritt zeigt Chat
+  links + Karte rechts, Kartenkacheln laden; über drei aufeinanderfolgende Chat-Antworten wuchs
+  die Marker-Anzahl nachweislich additiv (5 → 7 → 11), Karte zoomte automatisch nach, als sich
+  das Gespräch auf eine Region (Tirol) konzentrierte. (Erster Testlauf zeigte fälschlich 0 Marker
+  — Ursache war eine zu kurze Wartezeit im Test-Skript, nicht die Anwendung: der
+  Zielvorschlags-Call braucht ca. 10–15 s; mit `page.waitForResponse(...)` statt festem Timeout
+  bestätigt.)
+
+## [2026-10-05] — UI-Shell: durchgehender Foto-Hintergrund + "Handy-Rahmen" auf allen Seiten
+
+**Typ:** Refactor (Layout)
+**Betroffen:** `frontend/src/{App.tsx,components/{AppBackdrop,PhoneFrame,TripPlanView,ChatWindow,Chat}.tsx,pages/{PlannerPage,TripResultPage,MyTripsPage}.tsx}`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.7.0)
+
+### Was
+- Neue `components/AppBackdrop.tsx`: das Foto+Gradient-Overlay aus dem bisherigen Start-Hero wird
+  jetzt **einmal** in `App.tsx` außerhalb von `<Routes>` gerendert (`position: fixed`) — dasselbe
+  Bild bleibt bei jedem Seitenwechsel stehen, statt dass jede Seite ihr eigenes Hero-Bild neu lädt.
+- Neue `components/PhoneFrame.tsx`: klar umrandete (`border-2`), abgerundete, Handy-proportionierte
+  Karte (`max-w-[440px] h-[85vh]`) mit `header`/`children`(scrollbarer Body)/`footer` als
+  Flex-Column + `overflow-hidden` auf dem Frame — ein Footer (Composer, CTA-Button) ist dadurch
+  immer **Teil des Layouts**, kann also nie optisch über den Rahmen-Rand hinausragen (vorher:
+  `position: fixed`-Leisten relativ zum Browser-Viewport, unabhängig vom Karten-Rahmen).
+- `ChatWindow.tsx`: `ChatWindow` in `ChatMessages` (Body, scrollbar) umbenannt/aufgeteilt —
+  `Composer` wandert separat in den `PhoneFrame`-Footer, damit die Eingabeleiste fest im Rahmen
+  verankert ist statt mit dem Seiteninhalt mitzuscrollen oder darüber hinauszuragen.
+- Neue `components/TripPlanView.tsx`: der volle Reiseplan (Hero-Bild, Galerie, Tabs
+  Plan/Unterkunft/Erlebnisse/Infos, Tages-Timeline) — extrahiert aus der bisherigen
+  `TripResultPage`, kompakter für die schmale Rahmenbreite. Wird jetzt an **zwei** Stellen genutzt:
+  direkt im Plan-Schritt von `PlannerPage` **und** auf `TripResultPage`.
+- `PlannerPage.tsx` komplett umgebaut: **ein einziger** `PhoneFrame` statt Keyword-Hero +
+  zweispaltigem `ChatLayout`. Drei interne Schritte ohne Navigation dazwischen: `"keywords"`
+  (Formular + Flugvorschläge, Footer „Reise planen") → `"chat"` (`ChatMessages` + `Composer` im
+  Footer) → `"plan"`. Sobald `POST /trips/plan` erfolgreich ist, wird **nicht mehr** zu
+  `/trip/{id}` navigiert — stattdessen zeigt derselbe Frame sofort den **vollständigen** Plan via
+  `TripPlanView` (Footer: „Reise teilen" kopiert trotzdem den `/trip/{id}`-Link, „Neue Reise").
+- `TripResultPage.tsx` und `MyTripsPage.tsx` auf `PhoneFrame` umgestellt (kein eigenständiges
+  Breitbild-Layout mehr) — optisch identisch zum eingebetteten Plan-Schritt.
+- `Nav` (`components/Chat.tsx`) verschlankt für die schmale Rahmenbreite (kein `max-w-[1200px]`,
+  kleineres Logo, „Meine Reisen" → „Reisen", E-Mail-Anzeige durch Tooltip ersetzt, da auf 440px
+  kein Platz für die volle Adresse ist). `ChatLayout` entfernt (nach dem Umbau ungenutzt).
+
+### Warum
+- Nutzerfeedback: „das overlay aus dem anfangslayout soll sich durch alle seiten ziehen" (→
+  `AppBackdrop` einmal global statt pro Seite), „das text overlay soll eher aussehen wie ein
+  handy bzw. mit klaren rahmen" (→ `PhoneFrame`), „der balken in dem geschrieben wurde soll nicht
+  nach unten gehen aus dem rahmen heraus" (→ Composer/Footer als Teil des Flex-Layouts statt
+  `position: fixed`), „im reise overlay soll ein vollständiger plan stehen" (→ `TripPlanView`
+  direkt im Plan-Schritt statt Weiterleitung auf eine separate Seite).
+
+### Auswirkungen
+- Neue Dependencies: keine. Neue Env-Vars: keine. Migrationen: keine.
+- Breaking: Der Reiseplan erscheint nicht mehr auf einer eigenen Breitbild-Seite als primärer
+  Pfad — `/trip/:tripId` existiert weiterhin (für „Meine Reisen"-Links und „Reise teilen"), zeigt
+  aber jetzt dieselbe kompakte `PhoneFrame`-Ansicht statt eines Desktop-Layouts.
+
+### Verifiziert
+- `tsc -b && vite build`: fehlerfrei.
+- End-to-End per Playwright (Chromium-Container im `planmigo-net`) gegen den laufenden Stack:
+  Keywords-Schritt (Foto-Hintergrund durchgehend, Footer-Button sauber im Rahmen) → Flugauswahl
+  (Klassenwechsel bei Auswahl per DOM-Check bestätigt) → Chat-Schritt (Composer fest im
+  Rahmen-Footer, kein Überlauf) → Plan-Schritt zeigt vollständigen Plan mit Tabs direkt im Overlay
+  → `/trip/{id}` mit echten Plan-Daten und `/trips` (eingeloggt/ausgeloggt) zeigen denselben
+  Rahmen auf demselben Hintergrund — visuell konsistent über alle vier Seiten.
+
+## [2026-10-05] — Account-Login + Flugvorschläge mit Preisen
+
+**Typ:** Feature
+**Betroffen:** `backend/app/{models/user.py,core/security.py,core/deps.py,services/{auth,flights,openrouter,planner}.py,schemas/{auth,flight}.py,api/v1/{auth,flights,chat,trips}.py,services/prompts/{flights.md,compose.md}}`,
+`backend/requirements.txt`, `backend/tests/{test_auth,test_flights,test_trips,test_chat}.py`,
+`frontend/src/{App.tsx,main.tsx,components/{Chat,AuthModal}.tsx,hooks/{useAuth,useFlights,useTripPlan}.ts(x),api/{auth,flights,client,trips}.ts,pages/{PlannerPage,MyTripsPage}.tsx,types/{auth,flight}.ts}`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.6.0)
+
+### Was
+- **Auth (echtes Login/Registrierung, nicht nur UI-Attrappe):** `users.hashed_password` neu
+  (Spalte manuell per `ALTER TABLE` auf dem bestehenden Dev-Volume nachgezogen, da kein Alembic
+  existiert und `create_all` nur fehlende Tabellen anlegt). `core/security.py` um
+  `hash_password()`/`verify_password()` (bcrypt via passlib) ergänzt — `create_access_token()`/
+  `decode_access_token()` (JWT) waren schon als Stubs vorhanden. Neue Endpoints
+  `POST /auth/register`, `POST /auth/login` (beide liefern ein JWT), `GET /auth/me`.
+  `core/deps.py`: `get_current_user_optional()` (liest `Authorization: Bearer …`, liefert `None`
+  statt Fehler ohne/mit ungültigem Token) und `get_current_user()` (erzwingt 401).
+  `POST /chat` nutzt `get_current_user_optional` — ist ein Nutzer angemeldet, wird die neu
+  angelegte `Conversation.user_id` gesetzt; **Login bleibt optional**, anonyme Nutzung weiterhin
+  möglich. Neuer Endpoint `GET /trips/mine` (Auth erzwungen) listet Trips über
+  `Conversation.user_id`, registriert **vor** `GET /trips/{trip_id}` im Router (sonst hätte die
+  dynamische Route `/trips/mine` als `trip_id="mine"` abgefangen).
+  Frontend: `hooks/useAuth.tsx` (React-Context, JWT in `localStorage`, hydratisiert
+  `GET /auth/me` beim Laden), `api/client.ts`-Interceptor hängt den Token an jeden Request,
+  `components/AuthModal.tsx` (Login-/Registrieren-Tabs), `Nav` (`components/Chat.tsx`) zeigt
+  rechts oben „Anmelden" bzw. E-Mail + „Abmelden" + „Meine Reisen"-Link. Neue Route `/trips`
+  (`pages/MyTripsPage.tsx`) listet die verknüpften Reisen als Karten.
+- **Flugvorschläge mit Preisen, auswählbar vor dem Chat:** Es ist weiterhin **keine echte
+  Flug-API** angebunden (`travel_api.py` bleibt Platzhalter, `AMADEUS_API_KEY/SECRET` leer) —
+  neuer Endpoint `POST /flights/suggest` lässt stattdessen das LLM 4 realistische, nach Preis
+  sortierte Flugvorschläge generieren (`services/flights.py`, neuer Prompt
+  `prompts/flights.md`, `reasoning: {"enabled": false}` wie beim Compose-Fix unten, damit das
+  Reasoning-Modell nicht wieder sein Token-Budget verbrennt). Preise klar als Schätzung markiert
+  ("ca."), keine erfundenen Buchungscodes — gleiches Prinzip wie `compose.md` bei leeren
+  `travel_api`-Resultaten. `services/openrouter.py` bekam einen gemeinsamen Helper
+  `parse_json_object()` (Markdown-Fence-Stripping + JSON-Parsing), den `planner._parse_plan_json`
+  jetzt auch nutzt (Duplikation entfernt, bestehende Tests unverändert grün).
+  Frontend: Auf der Start-Seite (`PlannerPage.tsx`) ein „Flugpreise anzeigen (ca.)"-Button
+  innerhalb der Keyword-Karte (`hooks/useFlights.ts`); Ergebnisse als auswählbare Preis-Zeilen.
+  Die Auswahl wird beim Start der Planung als `answers.selected_flight` (JSON-String) an
+  `POST /trips/plan` durchgereicht — **kein neues Feld, kein neuer Endpoint**, das bestehende
+  `TripPlanRequest.answers: dict[str,str]` wird wiederverwendet. `compose.md` wurde um eine Regel
+  ergänzt: Passt das gewählte Flugziel zum finalen Reiseziel, übernimmt der Compose-Prompt
+  Airline/Preis unverändert für den Anreise-Flug an Tag 1; passt es nicht mehr, dient der Preis
+  nur als Orientierung.
+
+### Warum
+- Nutzerwunsch: „ergänze mir ein Feld, in dem auch mögliche Flüge angezeigt werden mit
+  Flugpreisen, die du dir zu Beginn aussuchen kannst" + „oben rechts ein Anmelden-Button …,
+  sodass die Reisen zu meinem Account verbunden werden können".
+- Bewusst **kein** Fake: Da keine Flug-Buchungs-API existiert (ARCHITECTURE.md §8 Nicht-Ziele:
+  „Kein eigenes Inventar/keine eigene Buchungsabwicklung"), wurden die Preise klar als
+  LLM-Schätzung gekennzeichnet statt eine echte Buchungsmöglichkeit vorzutäuschen — konsistent
+  mit dem bereits bestehenden Verhalten von `compose.md` bei leeren Suchergebnissen.
+
+### Auswirkungen
+- Neue Dependencies: `passlib[bcrypt]==1.7.4` + gepinnt `bcrypt==4.0.1` (neuere bcrypt-Versionen
+  brechen passlibs internen Self-Test — `ValueError: password cannot be longer than 72 bytes` bei
+  jedem `hash_password()`-Aufruf; mit `bcrypt==4.0.1` verifiziert behoben).
+- Neue Env-Vars: keine (nutzt bestehendes `SECRET_KEY`).
+- Migrationen: `ALTER TABLE users ADD COLUMN hashed_password VARCHAR(255) NOT NULL DEFAULT ''`
+  manuell auf dem lokalen Dev-Volume ausgeführt (Tabelle war leer, keine Daten betroffen). Auf
+  einem frischen `docker compose up` legt `create_all` die Spalte korrekt neu an — nur bereits
+  existierende Volumes brauchen den manuellen Schritt. Alembic ist weiterhin offen.
+  `conversations.user_id` war bereits nullable vorbereitet (siehe Eintrag „Chatbot-Flow lauffähig
+  gemacht").
+- Breaking: nein. `POST /chat` funktioniert unverändert ohne Token; bestehende Tests in
+  `test_chat.py` mussten nur die Fake-Mock-Signatur um das neue `user_id`-Kwarg ergänzen.
+
+### Verifiziert
+- `pytest` im `backend`-Container: 23/23 grün (neu: `test_auth.py`, `test_flights.py`,
+  `test_trips.py`).
+- `tsc -b && vite build`: fehlerfrei.
+- End-to-End per Playwright (Chromium-Container im `planmigo-net`) gegen den laufenden Stack:
+  Registrierung → Nav zeigt E-Mail + „Meine Reisen"/„Abmelden" → Keywords → „Flugpreise
+  anzeigen" → 4 Vorschläge (sortiert 99/149/199/229 €) → Flug ausgewählt → Chat → Plan erstellt →
+  Tag 1 im Ergebnis zeigt exakt „Hinflug mit easyJet nach Innsbruck … ca. 99 € p.P.“ (und der
+  Rückflug an Tag 8 ebenfalls mit easyJet) → `/trips` zeigt die verknüpfte Reise → Abmelden →
+  erneutes Anmelden stellt die Session wieder her → Session übersteht Seiten-Reload
+  (JWT aus `localStorage`). Auch direkt per `curl` gegen Backend/Postgres/OpenRouter geprüft
+  (Register/Duplicate-409/Login/Wrong-Password-401/Me/trips-mine/flights-suggest).
+
+## [2026-10-05] — Mobile-App-Design-Vorlage auf die Web-UI übertragen (Start-Hero + Ergebnis-Tabs)
+
+**Typ:** Feature
+**Betroffen:** `frontend/src/pages/{PlannerPage,TripResultPage}.tsx`
+**Architektur geändert:** nein (nur Layout/Styling innerhalb der bestehenden 4.2/4.3-Regeln, keine
+neuen Dependencies, keine neuen Routen/Datenflüsse)
+
+### Was
+- Nutzer gab einen Screenshot einer iOS-App-Designvorlage (4 Screens: Foto-Hero-Startseite,
+  Chat mit Quick-Reply-Chips, Reisevorschlag-Karte, Ergebnis-Seite mit Tab-Leiste
+  Reiseplan/Unterkunft/Erlebnisse/Infos + "Jetzt buchen") als Vorbild für die Web-App vor.
+- `PlannerPage.tsx` (Start-Screen): Keyword-Eingabe läuft jetzt über einen ganzseitigen Foto-Hero
+  (`seededImage`, fester Seed `travel-adventure-01` — laternenbeleuchtete Gasse, warmer Farbton
+  passend zur Terrakotta-Palette) mit Verlauf-Overlay, zweizeiliger Serif-Headline
+  („Dein Urlaub. **Einfach** geplant.") und dem Eingabe-Card frei auf dem Foto schwebend —
+  Funktion/Hooks unverändert, nur die Hülle neu.
+- `TripResultPage.tsx`: Tab-Leiste `Reiseplan | Unterkunft | Erlebnisse | Infos` (lucide-react-
+  Icons statt Emoji) über den bestehenden `items`, rein clientseitig gefiltert (`stay` /
+  `activity`+`restaurant` / alle) — keine Backend-Änderung nötig. Neuer "Infos"-Tab mit
+  Statistik-Kacheln (Anzahl Anreisen/Nächte/Aktivitäten/Restaurants, aus echten Items berechnet)
+  und einer Eckdaten-Liste (Ziel, Zeitraum, Budget). Hero bekam ein "✓ Geplant"-Badge und
+  „X Tage · Y Nächte" (aus `start_date`/`end_date` berechnet, Fallback: Anzahl Tage aus Items).
+  Sticky Bottom-Bar mit „← Neue Reise planen" + **„Reise teilen"** (kopiert `window.location.href`
+  via Clipboard-API, Erfolgsfeedback 2s).
+
+### Warum
+- Nutzerwunsch, die Mobile-App-Designsprache „gewissermaßen" auf die Web-Anwendung zu übertragen.
+- Bewusst **nicht** 1:1 übernommen: kein natives Bottom-Tab-Nav (Start/Inspiration/Trips/Profil —
+  ergibt für eine Single-Flow-Web-App ohne Mehrfach-Reisen-Verwaltung/Profilsystem keinen Sinn),
+  kein „Jetzt buchen"-Button (keine Booking-API vorhanden, siehe ARCHITECTURE.md §8 Nicht-Ziele —
+  ein funktionsloser Buchen-Button wäre irreführend) → stattdessen „Reise teilen" mit echter
+  Funktion (die Seite ist über `/trip/{id}` ohnehin dauerhaft erreichbar). Kein strukturiertes
+  Multiple-Choice-Quick-Reply-System im Chat übernommen, da `clarify.md` offene Fragen generiert
+  und keine strukturierten Optionen liefert — ein hartcodiertes Chip-Set hätte an der eigentlichen
+  Frage vorbeigehen können.
+
+### Auswirkungen
+- Neue Dependencies: keine (lucide-react war bereits vorhanden).
+- Neue Env-Vars: keine. Migrationen: keine. Breaking: nein (reines Frontend-Styling, Props/Hooks
+  unverändert).
+- Bildquelle weiterhin Picsum (`lib/images.ts`, siehe Eintrag „Reiseplan-Ergebnis auf eigener
+  Seite mit Bildern") — rein optisch, nicht inhaltlich an Destination/Aktivität gebunden.
+
+### Verifiziert
+- `tsc -b && vite build`: fehlerfrei (`node:20-slim`-Container).
+- End-to-End per Playwright (Chromium-Container im `planmigo-net`): Start-Hero → Keywords →
+  Chat → `ready_to_plan` → `/trip/{id}` mit allen vier Tabs einzeln geprüft (Reiseplan gefiltert
+  nach Tag, Unterkunft zeigt nur `stay`-Items, Erlebnisse nur `activity`+`restaurant`, Infos zeigt
+  korrekte Statistik-Zahlen); Sticky-Bottom-Bar per Scroll-Screenshot als tatsächlich
+  `position: fixed` am Viewport-Boden bestätigt (im `fullPage`-Screenshot zunächst fälschlich
+  mittig wirkend — Playwright-Stitching-Artefakt, kein echter Bug).
+
+## [2026-10-05] — Reiseplan-Ergebnis auf eigener Seite mit Bildern
+
+**Typ:** Feature
+**Betroffen:** `frontend/src/App.tsx`, `frontend/src/pages/{PlannerPage,TripResultPage}.tsx`,
+`frontend/src/components/TripCard.tsx` (gelöscht), `frontend/src/lib/images.ts` (neu),
+`frontend/src/types/chat.ts`, `frontend/package.json`, `frontend/package-lock.json`
+**Architektur geändert:** ja (→ ARCHITECTURE.md v1.5.0)
+
+### Was
+- `react-router-dom` ergänzt; `App.tsx` wrapped jetzt in `BrowserRouter` mit zwei Routen:
+  `/` (`PlannerPage`, unverändert: Keyword-Eingabe + Chat mit Migo) und `/trip/:tripId`
+  (neu: `TripResultPage`). nginx liefert für unbekannte Pfade bereits `index.html` aus
+  (`try_files … /index.html` in `nginx.conf`), daher funktioniert Client-Side-Routing auch bei
+  Direktaufruf/Reload von `/trip/:id` ohne weitere Server-Änderung.
+- `PlannerPage.tsx`: Sobald `POST /trips/plan` erfolgreich ist, navigiert die Seite jetzt direkt
+  zu `/trip/{plan.id}` (`useNavigate`), statt den Plan in der rechten Sidebar-Karte anzuzeigen.
+  Das sticky Panel zeigt während des Chats nur noch einen Platzhalter/Pending-Hinweis.
+- Neue Seite `pages/TripResultPage.tsx`: lädt den Plan selbstständig per `useTripPlan(tripId)`
+  (bestehender Query-Hook, `GET /trips/{id}`) — Lade- und Fehlerzustand inklusive. Ganzseitiges
+  Hero-Bild (Zielort) mit Farbverlauf-Overlay, Titel/Datum/Budget-Chips, eine 4er-Bildergalerie
+  und pro Tag/Item ein zusätzliches Foto-Thumbnail in der Timeline (vorher: nur Emoji-Icon).
+- `components/TripCard.tsx` gelöscht (vollständig durch `TripResultPage` abgelöst, keine weiteren
+  Verwender mehr); ungenutztes `plan`-Feld aus `ChatSession` (`types/chat.ts`) entfernt.
+- `lib/images.ts` (neu): `seededImage(seed, w, h)` liefert eine deterministische Bild-URL über
+  Picsum Photos (`https://picsum.photos/seed/…`). Kein API-Key nötig, kein Bild-Provider im
+  Backend vorhanden (`travel_api.py` liefert keine Foto-URLs) — Picsum reicht als visueller
+  MVP-Platzhalter, bis ein echter Foto-Provider (z. B. Unsplash/Pexels API) angebunden wird.
+
+### Warum
+- Nutzerwunsch: „mach mir das Ergebnis auf einer neuen Seite. dazu sollen mehr Bilder verwendet
+  werden." Der bisherige Reiseplan war eine reine Text-/Icon-Timeline in der Chat-Sidebar.
+
+### Auswirkungen
+- Neue Dependencies: `react-router-dom` (`package.json` **und** `package-lock.json` — Lockfile
+  per Einweg-`node:20-slim`-Container mit `npm install --package-lock-only` regeneriert, da in
+  dieser Umgebung kein Node.js installiert ist).
+- Neue Env-Vars: keine.
+- Migrationen: keine.
+- Breaking: Der Reiseplan erscheint nicht mehr neben dem Chat, sondern auf einer eigenen Route
+  (`/trip/:tripId`); bestehende Komponente `TripCard` wurde entfernt.
+- Bildquelle (Picsum) liefert thematisch zufällige, nicht reiseinhaltlich passende Fotos (kein
+  echter Bild-Suchdienst angebunden) — optisch stimmig als Platzhalter, inhaltlich aber nicht an
+  Destination/Aktivität geknüpft. Für echte, zum Ort passende Fotos wäre eine Anbindung an
+  Unsplash/Pexels (eigener API-Key, neue Env-Var) ein offener Folgeschritt.
+
+### Verifiziert
+- `tsc -b && vite build`: fehlerfrei (`node:20-slim`-Container).
+- `docker compose up -d --build backend frontend`: beide Container `Up`/healthy.
+- End-to-End per Playwright (Chromium-Container im `planmigo-net`, `http://frontend:5173`):
+  Keyword-Eingabe → Chat mit Migo (4 Rückfragen, `ready_to_plan`) → automatische Weiterleitung zu
+  `/trip/{id}` → vollständige Ergebnisseite gerendert (Hero-Bild „Tirol, Österreich" mit
+  Datum-/Budget-Chips, 4-teilige Galerie, 7 Tage mit je 2–4 bebilderten Items) → keine
+  Console-/Page-Errors.
+
+## [2026-10-05] — Fix: Reiseplan-Erstellung schlug wegen Reasoning-Tokens fehl
+
+**Typ:** Fix
+**Betroffen:** `backend/app/services/openrouter.py`, `backend/app/services/planner.py`
+**Architektur geändert:** nein
+
+### Was
+- `POST /trips/plan` endete zuverlässig mit 500 (ungefangene `pydantic.ValidationError`) bzw.
+  503. Ursache: `OPENROUTER_MODEL=deepseek/deepseek-v4-flash` ist ein Reasoning-Modell und hat
+  beim Compose-Call (JSON mit bis zu 14 Items, `max_tokens=4000`) das komplette Token-Budget für
+  verstecktes Reasoning verbraucht (`reasoning_tokens: 4000`, `finish_reason: "length"`) — die
+  API lieferte `choices[0].message.content: null` zurück, bevor überhaupt JSON geschrieben wurde.
+- `services/openrouter.py`: `complete()` bekommt einen neuen optionalen `reasoning`-Parameter
+  (wird 1:1 als `reasoning`-Feld an OpenRouter durchgereicht). Zusätzlich: leerer/`None`-Content
+  in der Antwort wird jetzt als sauberer `LLMServiceError` (inkl. `finish_reason`) geworfen statt
+  eine ungefangene Pydantic-`ValidationError` zu verursachen.
+- `services/planner.py`: `build_trip_plan()` ruft `openrouter.complete()` jetzt mit
+  `reasoning={"enabled": False}` auf — verifiziert per Direktaufruf gegen die OpenRouter-API:
+  ohne Reasoning liefert das Modell zuverlässig vollständiges JSON (`finish_reason: "stop"`,
+  `reasoning_tokens: 0`).
+
+### Warum
+- Nutzer meldete: „es erstellt keinen Reiseplan". Reproduziert über Backend-Logs
+  (`docker compose logs backend`) → `pydantic_core._pydantic_core.ValidationError: content …
+  Input should be a valid string [type=string_type, input_value=None]`.
+
+### Auswirkungen
+- Neue Dependencies: keine.
+- Neue Env-Vars: keine.
+- Migrationen: keine.
+- Breaking: nein (`reasoning` ist optional, Default weiterhin ohne das Feld — betrifft nur den
+  Compose-Call in `planner.py`; der Clarify-Call bleibt unverändert, da dort bisher kein Problem
+  auftrat).
+
+### Verifiziert
+- `pytest` im `backend`-Container: 10/10 grün.
+- End-to-End gegen den laufenden Docker-Stack (echter OpenRouter-Key): Start-Turn → 2 Rückfragen
+  → `ready_to_plan: true` → `POST /trips/plan` → 200 mit vollständigem Plan („Tirol, Österreich",
+  07.–13.09.2026, Budget 1500 €, 17 Items).
+
 ## [2026-07-15] — Design-System: Struktur-Umbau auf Nav/ChatLayout + Farbkorrektur
 
 **Typ:** Feature | Fix

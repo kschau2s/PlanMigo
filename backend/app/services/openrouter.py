@@ -1,4 +1,6 @@
 import asyncio
+import json
+import re
 
 import httpx
 from pydantic import BaseModel
@@ -14,6 +16,21 @@ class LLMServiceError(Exception):
     pass
 
 
+def parse_json_object(content: str) -> dict:
+    """Unwrap a model's JSON reply, tolerating markdown code fences."""
+    text = content.strip()
+    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, flags=re.DOTALL)
+    if fence:
+        text = fence.group(1)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise LLMServiceError(f"LLM returned invalid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise LLMServiceError("LLM JSON is not an object")
+    return data
+
+
 class LLMResponse(BaseModel):
     content: str
     model: str
@@ -26,6 +43,7 @@ async def complete(
     temperature: float = 0.7,
     max_tokens: int = 2000,
     response_format: dict | None = None,
+    reasoning: dict | None = None,
     timeout_seconds: float = TIMEOUT_SECONDS,
     settings: Settings | None = None,
 ) -> LLMResponse:
@@ -40,6 +58,8 @@ async def complete(
     }
     if response_format is not None:
         body["response_format"] = response_format
+    if reasoning is not None:
+        body["reasoning"] = reasoning
 
     headers = {
         "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
@@ -66,8 +86,17 @@ async def complete(
                         f"OpenRouter status {response.status_code}: {response.text[:300]}"
                     )
                 data = response.json()
+                message = data["choices"][0]["message"]
+                content = message.get("content")
+                if not content:
+                    # Reasoning models can burn the whole max_tokens budget on
+                    # hidden reasoning and return no content (finish_reason "length").
+                    finish_reason = data["choices"][0].get("finish_reason")
+                    raise LLMServiceError(
+                        f"OpenRouter returned empty content (finish_reason={finish_reason})"
+                    )
                 return LLMResponse(
-                    content=data["choices"][0]["message"]["content"],
+                    content=content,
                     model=data.get("model", resolved_model),
                     raw=data,
                 )
