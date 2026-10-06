@@ -6,7 +6,8 @@ import { Nav } from "../components/Chat";
 import { PhoneFrame } from "../components/PhoneFrame";
 import { useAuth } from "../hooks/useAuth";
 import { useMyTrips } from "../hooks/useTripPlan";
-import { seededImage } from "../lib/images";
+import { PlaceImage } from "../components/PlaceImage";
+import { destinationQuery } from "../lib/images";
 
 function formatDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -69,11 +70,11 @@ export function MyTripsPage() {
                     to={`/trip/${trip.id}`}
                     className="group flex gap-3 overflow-hidden rounded-card border border-card bg-surface-card shadow-card transition-opacity duration-quick ease-brand hover:opacity-90"
                   >
-                    <img
-                      src={seededImage(trip.destination, 160, 160)}
+                    <PlaceImage
+                      query={destinationQuery(trip.destination)}
+                      width={330}
                       alt={trip.destination}
-                      className="h-20 w-20 shrink-0 object-cover"
-                      loading="lazy"
+                      className="h-[80px] w-[80px] shrink-0"
                     />
                     <div className="min-w-0 py-2 pr-3">
                       <h2 className="truncate font-serif text-body font-bold text-content-heading">

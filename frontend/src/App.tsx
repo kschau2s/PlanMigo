@@ -14,7 +14,7 @@ function App() {
     <BrowserRouter>
       <AppBackdrop />
       <AppSidebar />
-      <main className="min-h-screen md:ml-72">
+      <main className="min-h-screen pt-[56px] md:ml-72 md:pt-0">
         <Routes>
           <Route path="/" element={<PlannerPage />} />
           <Route path="/inspiration" element={<InspirationPage />} />

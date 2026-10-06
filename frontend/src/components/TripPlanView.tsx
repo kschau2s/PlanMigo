@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { seededImage } from "../lib/images";
+import { PlaceImage } from "./PlaceImage";
+import { destinationQuery } from "../lib/images";
 import type { TripItem, TripItemType, TripPlan } from "../types/trip";
 
 const ITEM_META: Record<TripItemType, { icon: typeof Plane; label: string }> = {
@@ -56,7 +57,15 @@ function tripLength(plan: TripPlan): string | null {
   return dayCount > 0 ? `${dayCount} Tage` : null;
 }
 
-function TripItemRow({ item, seed }: { item: TripItem; seed: string }) {
+// Suchbegriff je Eintragstyp — Aktivitätstitel allein finden auf Commons selten passende Fotos.
+const ITEM_IMAGE_TERM: Record<TripItemType, string> = {
+  flight: "Flughafen",
+  stay: "Hotel",
+  activity: "Sehenswürdigkeit",
+  restaurant: "Restaurant",
+};
+
+function TripItemRow({ item, imageQuery, imageIndex }: { item: TripItem; imageQuery: string; imageIndex: number }) {
   const meta = ITEM_META[item.type];
   const Icon = meta.icon;
   const title = asText(item.payload.title) ?? meta.label;
@@ -69,12 +78,7 @@ function TripItemRow({ item, seed }: { item: TripItem; seed: string }) {
 
   return (
     <li className="flex gap-3 overflow-hidden rounded-card bg-pm-sand shadow-soft">
-      <img
-        src={seededImage(seed, 120, 120)}
-        alt=""
-        className="h-20 w-20 shrink-0 object-cover"
-        loading="lazy"
-      />
+      <PlaceImage query={imageQuery} index={imageIndex} width={330} className="h-[80px] w-[80px] shrink-0" />
       <div className="min-w-0 flex-1 py-2 pr-3">
         <p className="flex flex-wrap items-center gap-1.5 text-caption font-semibold text-content-heading">
           {title}
@@ -117,7 +121,8 @@ function DayTimeline({ plan, items }: { plan: TripPlan; items: TripItem[] }) {
                 <TripItemRow
                   key={item.id}
                   item={item}
-                  seed={asText(item.payload.title) ?? `${plan.destination}-${item.id}`}
+                  imageQuery={`${plan.destination} ${ITEM_IMAGE_TERM[item.type]}`}
+                  imageIndex={(item.day + item.order) % 4}
                 />
               ))}
           </ul>
@@ -207,15 +212,15 @@ export function TripPlanView({ plan }: { plan: TripPlan }) {
   }, [plan, activeTab]);
 
   const length = tripLength(plan);
-  const gallerySeeds = [`${plan.destination}-gallery-1`, `${plan.destination}-gallery-2`];
+  const galleryIndexes = [1, 2];
 
   return (
     <div>
       <div className="relative h-44 w-full overflow-hidden">
-        <img
-          src={seededImage(plan.destination, 880, 640)}
+        <PlaceImage
+          query={destinationQuery(plan.destination)}
           alt={plan.destination}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-pm-espresso to-transparent opacity-90" />
         <div className="absolute right-3 top-3 flex items-center gap-1 rounded-chip bg-pm-cream px-2 py-1 text-[11px] font-bold text-accent-secondary shadow-soft">
@@ -232,13 +237,13 @@ export function TripPlanView({ plan }: { plan: TripPlan }) {
 
       <div className="p-4">
         <div className="grid grid-cols-2 gap-2">
-          {gallerySeeds.map((seed) => (
-            <img
-              key={seed}
-              src={seededImage(seed, 300, 220)}
-              alt=""
-              className="h-20 w-full rounded-card object-cover shadow-soft"
-              loading="lazy"
+          {galleryIndexes.map((index) => (
+            <PlaceImage
+              key={index}
+              query={destinationQuery(plan.destination)}
+              index={index}
+              width={330}
+              className="h-[80px] w-full rounded-card shadow-soft"
             />
           ))}
         </div>

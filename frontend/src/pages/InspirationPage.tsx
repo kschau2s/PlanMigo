@@ -1,45 +1,201 @@
-import { Compass, MapPin } from "lucide-react";
+import { ArrowRight, Compass, MapPin } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
-const inspiration = [
-  { title: "Alpine Ruhe", destination: "Zermatt · Schweiz", tag: "Bergidylle", blurb: "Stilles Hotel, Bergbahnen und Panorama mit wenig Trubel." },
-  { title: "Mediterrane Tage", destination: "Kreta · Griechenland", tag: "Meer & Küche", blurb: "Baden, Tavernen und kleine Dörfer mit viel Sonne." },
-  { title: "Künstlerische Städte", destination: "Lissabon · Portugal", tag: "Stadtleben", blurb: "Farbige Straßen, Musik und gute Cafés in der Altstadt." },
-  { title: "Wald & Wellness", destination: "Tirol · Österreich", tag: "Entspannung", blurb: "Waldwege, Sauna und ein ruhiges Wochenend-Feeling." },
-  { title: "Strand & Meer", destination: "Mallorca · Spanien", tag: "Sommer", blurb: "Kleine Buchten, Café-Sonnenuntergänge und entspannte Tage." },
-  { title: "Kulturtage", destination: "Prag · Tschechien", tag: "Historisch", blurb: "Altstadt, Abendessen und viele schöne Ecken zum Entdecken." },
+import { PlaceImage } from "../components/PlaceImage";
+
+type Category = "Alle" | "Meer" | "Berge" | "Stadt" | "Entspannung";
+
+interface Idea {
+  title: string;
+  destination: string;
+  category: Exclude<Category, "Alle">;
+  tag: string;
+  blurb: string;
+  imageQuery: string;
+  keywords: string[];
+}
+
+const CATEGORIES: Category[] = ["Alle", "Meer", "Berge", "Stadt", "Entspannung"];
+
+const IDEAS: Idea[] = [
+  {
+    title: "Alpine Ruhe",
+    destination: "Zermatt · Schweiz",
+    category: "Berge",
+    tag: "Bergidylle",
+    blurb: "Stilles Hotel, Bergbahnen und Panorama auf das Matterhorn.",
+    imageQuery: "Zermatt Matterhorn",
+    keywords: ["Berge", "ruhig", "Zermatt"],
+  },
+  {
+    title: "Mediterrane Tage",
+    destination: "Kreta · Griechenland",
+    category: "Meer",
+    tag: "Meer & Küche",
+    blurb: "Baden, Tavernen und kleine Dörfer mit viel Sonne.",
+    imageQuery: "Kreta Strand Bucht",
+    keywords: ["Strand", "Kulinarik", "Kreta"],
+  },
+  {
+    title: "Bunte Gassen",
+    destination: "Lissabon · Portugal",
+    category: "Stadt",
+    tag: "Stadtleben",
+    blurb: "Gelbe Trams, Fado-Musik und Pastéis de Nata in der Altstadt.",
+    imageQuery: "Lisbon tram",
+    keywords: ["Städtetrip", "Kulinarik", "Lissabon"],
+  },
+  {
+    title: "Wald & Wellness",
+    destination: "Tirol · Österreich",
+    category: "Entspannung",
+    tag: "Entspannung",
+    blurb: "Waldwege, Sauna und ein ruhiges Wochenend-Feeling.",
+    imageQuery: "Achensee",
+    keywords: ["ruhig", "Wellness", "Tirol"],
+  },
+  {
+    title: "Versteckte Buchten",
+    destination: "Mallorca · Spanien",
+    category: "Meer",
+    tag: "Sommer",
+    blurb: "Türkisfarbene Calas, Sonnenuntergänge und entspannte Tage.",
+    imageQuery: "Mallorca Cala de Sa Calobra",
+    keywords: ["Strand", "Sommer", "Mallorca"],
+  },
+  {
+    title: "Goldene Stadt",
+    destination: "Prag · Tschechien",
+    category: "Stadt",
+    tag: "Historisch",
+    blurb: "Karlsbrücke im Morgenlicht, Burgviertel und gemütliche Kneipen.",
+    imageQuery: "Prag Karlsbrücke",
+    keywords: ["Städtetrip", "Kultur", "Prag"],
+  },
+  {
+    title: "Dolomiten-Gipfel",
+    destination: "Südtirol · Italien",
+    category: "Berge",
+    tag: "Abenteuer",
+    blurb: "Hüttenwanderungen zwischen bleichen Felstürmen und Almwiesen.",
+    imageQuery: "Dolomiten Tre Cime",
+    keywords: ["Berge", "Abenteuer", "Südtirol"],
+  },
+  {
+    title: "Amalfi-Träume",
+    destination: "Amalfiküste · Italien",
+    category: "Meer",
+    tag: "Dolce Vita",
+    blurb: "Pastellfarbene Dörfer an steilen Klippen über dem Meer.",
+    imageQuery: "Positano Amalfi",
+    keywords: ["Meer", "Kulinarik", "Amalfiküste"],
+  },
+  {
+    title: "Fjordstille",
+    destination: "Norwegen",
+    category: "Entspannung",
+    tag: "Natur pur",
+    blurb: "Spiegelglatte Fjorde, rote Holzhäuser und lange helle Abende.",
+    imageQuery: "Geirangerfjord",
+    keywords: ["Natur", "ruhig", "Norwegen"],
+  },
 ];
 
-export function InspirationPage() {
-  return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-4xl rounded-card border-2 border-card bg-surface-card p-6 shadow-card">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-button bg-pm-sand">
-            <Compass className="text-accent-primary" size={18} />
-          </div>
-          <div>
-            <p className="pm-eyebrow">Inspiration</p>
-            <h1 className="font-serif text-h2 text-content-heading">Reiseideen für deinen nächsten Trip</h1>
-          </div>
-        </div>
+function plannerLink(keywords: string[]): string {
+  return `/?keywords=${encodeURIComponent(keywords.join(","))}`;
+}
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {inspiration.map((item) => (
-            <article key={item.title} className="rounded-card border border-card bg-surface-page p-4 shadow-soft">
-              <div className="flex items-center justify-between gap-2">
-                <span className="rounded-chip bg-pm-terracotta/10 px-2 py-1 text-[10px] font-semibold text-pm-terracotta">
-                  {item.tag}
-                </span>
-              </div>
-              <h2 className="mt-3 font-serif text-cardTitle text-content-heading">{item.title}</h2>
-              <p className="mt-2 flex items-center gap-1 text-caption text-content-muted">
-                <MapPin size={12} />
-                {item.destination}
-              </p>
-              <p className="mt-3 text-body text-content-body">{item.blurb}</p>
-            </article>
+export function InspirationPage() {
+  const [category, setCategory] = useState<Category>("Alle");
+  const [featured, ...rest] = IDEAS;
+  const visible = category === "Alle" ? rest : IDEAS.filter((idea) => idea.category === category);
+
+  return (
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6">
+      {/* Hero */}
+      <Link
+        to={plannerLink(featured.keywords)}
+        className="group relative block h-[340px] overflow-hidden rounded-card shadow-card"
+      >
+        <PlaceImage
+          query={featured.imageQuery}
+          width={1920}
+          alt={featured.destination}
+          className="absolute inset-0 h-full w-full transition-transform duration-base ease-brand group-hover:scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-pm-espresso to-transparent opacity-90" />
+        <div className="absolute inset-x-0 bottom-0 p-5 md:p-6">
+          <p className="flex items-center gap-2 text-eyebrow font-semibold uppercase tracking-eyebrow text-pm-sandLight">
+            <Compass size={14} /> Reiseidee der Woche
+          </p>
+          <h1 className="mt-2 font-serif text-display font-bold leading-none tracking-display text-pm-cream">
+            {featured.title}
+          </h1>
+          <p className="mt-2 flex items-center gap-1 text-body text-pm-creamWarm">
+            <MapPin size={14} /> {featured.destination}
+          </p>
+          <p className="mt-3 max-w-xl text-body text-pm-cream">{featured.blurb}</p>
+          <span className="mt-5 inline-flex items-center gap-2 rounded-button bg-accent-primary px-5 py-2.5 text-caption font-bold text-pm-white shadow-soft transition-opacity duration-quick ease-brand group-hover:opacity-90">
+            Diese Reise planen <ArrowRight size={14} />
+          </span>
+        </div>
+      </Link>
+
+      {/* Filter */}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-serif text-h1 font-bold text-pm-cream">Wohin als Nächstes?</h2>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={`rounded-chip px-4 py-1.5 text-caption font-semibold transition-colors duration-quick ease-brand ${
+                category === c
+                  ? "bg-accent-primary text-pm-white shadow-soft"
+                  : "bg-surface-card text-content-body hover:text-accent-primary"
+              }`}
+            >
+              {c}
+            </button>
           ))}
         </div>
+      </div>
+
+      {/* Grid */}
+      <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {visible.map((idea) => (
+          <Link
+            key={idea.title}
+            to={plannerLink(idea.keywords)}
+            className="group flex flex-col overflow-hidden rounded-card bg-surface-card shadow-card transition-transform duration-base ease-brand hover:-translate-y-1"
+          >
+            <div className="relative aspect-[4/3] overflow-hidden">
+              <PlaceImage
+                query={idea.imageQuery}
+                alt={idea.destination}
+                className="absolute inset-0 h-full w-full transition-transform duration-base ease-brand group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-pm-espresso via-transparent to-transparent opacity-80" />
+              <span className="absolute left-3 top-3 rounded-chip bg-pm-cream px-2.5 py-1 text-[11px] font-bold text-accent-primary shadow-soft">
+                {idea.tag}
+              </span>
+              <div className="absolute inset-x-0 bottom-0 p-4">
+                <h3 className="font-serif text-cardTitle font-bold text-pm-cream">{idea.title}</h3>
+                <p className="mt-0.5 flex items-center gap-1 text-caption text-pm-creamWarm">
+                  <MapPin size={12} /> {idea.destination}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col p-4">
+              <p className="flex-1 text-caption leading-relaxed text-content-body">{idea.blurb}</p>
+              <span className="mt-3 inline-flex items-center gap-1 text-caption font-bold text-accent-primary">
+                Reise planen <ArrowRight size={13} className="transition-transform duration-quick ease-brand group-hover:translate-x-1" />
+              </span>
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );

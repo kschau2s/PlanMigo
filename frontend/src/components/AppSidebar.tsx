@@ -18,7 +18,8 @@ import logo from "../assets/planmigo-logo.svg";
 import { AuthModal } from "./AuthModal";
 import { useAuth } from "../hooks/useAuth";
 import { useMyTrips } from "../hooks/useTripPlan";
-import { seededImage } from "../lib/images";
+import { PlaceImage } from "./PlaceImage";
+import { destinationQuery } from "../lib/images";
 
 const MAX_SIDEBAR_TRIPS = 5;
 
@@ -102,11 +103,10 @@ function TripsSection({ onOpenAuth }: { onOpenAuth: () => void }) {
             }`
           }
         >
-          <img
-            src={seededImage(trip.destination, 48, 48)}
-            alt=""
-            className="h-[24px] w-[24px] shrink-0 rounded-full object-cover"
-            loading="lazy"
+          <PlaceImage
+            query={destinationQuery(trip.destination)}
+            width={120}
+            className="h-[28px] w-[28px] shrink-0 rounded-full"
           />
           <span className="truncate">{trip.destination}</span>
         </NavLink>
@@ -244,6 +244,23 @@ export function AppSidebar() {
               <NavItem to="/inspiration" label="Inspiration" icon={Compass} />
               <NavItem to="/flights" label="Günstigste Flüge" icon={PlaneTakeoff} />
             </nav>
+            <Link
+              to="/inspiration"
+              className="group relative mt-3 block h-[110px] overflow-hidden rounded-card shadow-soft"
+            >
+              <PlaceImage
+                query="Zermatt Matterhorn"
+                width={330}
+                className="absolute inset-0 h-full w-full transition-transform duration-base ease-brand group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-pm-espresso to-transparent opacity-90" />
+              <div className="absolute inset-x-0 bottom-0 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-pm-sandLight">
+                  Reiseidee der Woche
+                </p>
+                <p className="font-serif text-body font-bold text-pm-cream">Alpine Ruhe · Zermatt</p>
+              </div>
+            </Link>
 
             <SectionLabel>Meine Reisen</SectionLabel>
             <nav className="space-y-1">

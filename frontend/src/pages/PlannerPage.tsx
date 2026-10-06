@@ -1,11 +1,13 @@
 import { ArrowRight, Check, Link as LinkIcon, MapPinned, Plane } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { Composer, Nav } from "../components/Chat";
 import { ChatMessages } from "../components/ChatWindow";
 import { DestinationMap } from "../components/DestinationMap";
 import { KeywordPills } from "../components/KeywordPills";
 import { PhoneFrame } from "../components/PhoneFrame";
+import { PlaceImage } from "../components/PlaceImage";
 import { TripPlanView } from "../components/TripPlanView";
 import { useChat } from "../hooks/useChat";
 import { useSuggestDestinations } from "../hooks/useDestinations";
@@ -28,19 +30,22 @@ function mergeDestinations(
   return additions.length > 0 ? [...previous, ...additions] : previous;
 }
 
-const SUGGESTED_KEYWORDS = [
-  "Berge",
-  "Strand",
-  "Städtetrip",
-  "ruhig",
-  "Abenteuer",
-  "Kulinarik",
-  "September",
-  "Familie",
+const SUGGESTED_KEYWORDS: { label: string; imageQuery: string }[] = [
+  { label: "Berge", imageQuery: "Tre Cime di Lavaredo" },
+  { label: "Strand", imageQuery: "Mallorca Strand Cala" },
+  { label: "Städtetrip", imageQuery: "Prag Karlsbrücke" },
+  { label: "ruhig", imageQuery: "Lago di Braies" },
+  { label: "Abenteuer", imageQuery: "Wandern Gipfel Alpen" },
+  { label: "Kulinarik", imageQuery: "Pizza Napoletana" },
+  { label: "September", imageQuery: "Weinberg Herbst" },
+  { label: "Familie", imageQuery: "Ostsee Strandkorb" },
 ];
 
 export function PlannerPage() {
-  const { keywords, addKeyword, removeKeyword, clearKeywords } = useKeywords();
+  const [searchParams] = useSearchParams();
+  const { keywords, addKeyword, removeKeyword, clearKeywords } = useKeywords(
+    (searchParams.get("keywords") ?? "").split(",").map((k) => k.trim()).filter(Boolean),
+  );
   const [keywordDraft, setKeywordDraft] = useState("");
   const [session, setSession] = useState<ChatSession | null>(null);
   const [completedPlan, setCompletedPlan] = useState<TripPlan | null>(null);
@@ -220,14 +225,23 @@ export function PlannerPage() {
         }
       >
         {step === "keywords" && (
+          <div>
+          <div className="relative h-[180px] overflow-hidden">
+            <PlaceImage query="Positano Amalfi" width={960} className="absolute inset-0 h-full w-full" />
+            <div className="absolute inset-0 bg-gradient-to-t from-pm-espresso to-transparent opacity-90" />
+            <div className="absolute inset-x-0 bottom-0 p-4">
+              <p className="text-eyebrow font-semibold uppercase tracking-eyebrow text-pm-sandLight">
+                PlanMigo · AI Travel Planner
+              </p>
+              <h1 className="mt-1 font-serif text-h2 font-bold leading-tight text-pm-cream">
+                Dein Urlaub. <span className="text-pm-sage">Einfach</span> geplant.
+              </h1>
+            </div>
+          </div>
           <div className="p-4">
-            <p className="pm-eyebrow">PlanMigo · AI Travel Planner</p>
-            <h1 className="mt-1 font-serif text-h2 font-bold leading-tight text-content-heading">
-              Dein Urlaub. <span className="text-pm-sage">Einfach</span> geplant.
-            </h1>
-            <p className="mt-2 text-caption text-content-muted">
-              Gib ein paar Schlagwörter ein — Migo stellt dir ein paar Fragen und baut daraus
-              deinen kompletten Reiseplan.
+            <p className="text-caption text-content-muted">
+              Wähle, worauf du Lust hast, oder tippe eigene Schlagwörter — Migo stellt dir ein paar
+              Fragen und baut daraus deinen kompletten Reiseplan.
             </p>
 
             <div className="mt-4 flex gap-2">
@@ -248,16 +262,40 @@ export function PlannerPage() {
               </button>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {SUGGESTED_KEYWORDS.filter((s) => !keywords.includes(s)).map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => addKeyword(suggestion)}
-                  className="rounded-chip border border-card px-2.5 py-1 text-[11px] text-content-muted transition-colors duration-quick ease-brand hover:border-accent-secondary hover:text-accent-secondary"
-                >
-                  + {suggestion}
-                </button>
-              ))}
+            <div className="mt-3 grid grid-cols-4 gap-1.5">
+              {SUGGESTED_KEYWORDS.map(({ label, imageQuery }) => {
+                const isSelected = keywords.includes(label);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => (isSelected ? removeKeyword(label) : addKeyword(label))}
+                    aria-pressed={isSelected}
+                    className={`group relative h-[64px] overflow-hidden rounded-button shadow-soft ring-2 transition-all duration-quick ease-brand ${
+                      isSelected ? "ring-accent-primary" : "ring-transparent hover:ring-accent-secondary"
+                    }`}
+                  >
+                    <PlaceImage
+                      query={imageQuery}
+                      width={330}
+                      className="absolute inset-0 h-full w-full transition-transform duration-base ease-brand group-hover:scale-110"
+                    />
+                    <div
+                      className={`absolute inset-0 bg-pm-espresso transition-opacity duration-quick ease-brand ${
+                        isSelected ? "opacity-30" : "opacity-50"
+                      }`}
+                    />
+                    {isSelected && (
+                      <span className="absolute right-1 top-1 grid h-[16px] w-[16px] place-items-center rounded-full bg-accent-primary text-pm-white">
+                        <Check size={10} strokeWidth={3} />
+                      </span>
+                    )}
+                    <span className="absolute inset-x-0 bottom-1 text-center text-[11px] font-bold text-pm-cream">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {keywords.length > 0 && (
@@ -322,6 +360,7 @@ export function PlannerPage() {
                 </div>
               )}
             </div>
+          </div>
           </div>
         )}
 
