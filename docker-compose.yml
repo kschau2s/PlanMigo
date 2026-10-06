@@ -7,12 +7,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-planmigo}
     volumes:
       - planmigo-db-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    networks:
-      - planmigo-net
+    network_mode: host
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-planmigo}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-planmigo} -h 127.0.0.1"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,40 +19,33 @@ services:
       context: ./backend
     env_file:
       - .env
-    ports:
-      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://planmigo:planmigo@127.0.0.1:5432/planmigo
+    network_mode: host
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - planmigo-net
 
   frontend:
     build:
       context: ./frontend
     env_file:
       - .env
-    ports:
-      - "5173:5173"
+    network_mode: host
     depends_on:
       - backend
-    networks:
-      - planmigo-net
 
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
     environment:
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-change-me}
-      PLANMIGO_BACKEND_URL: http://backend:8000/api/v1
+      PLANMIGO_BACKEND_URL: http://127.0.0.1:8000/api/v1
     volumes:
       - ./openwebui:/app/backend/data/pipelines
       - planmigo-openwebui-data:/app/backend/data
-    ports:
-      - "${OPENWEBUI_PORT:-3000}:8080"
+    network_mode: host
     depends_on:
       - backend
-    networks:
-      - planmigo-net
 
 networks:
   planmigo-net:

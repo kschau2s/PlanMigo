@@ -6,6 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Codespaces port forwarding proxies through *.app.github.dev.
+    allowedHosts: [".app.github.dev"],
     // Same-origin API in dev — mirrors the nginx proxy used in the Docker build.
     proxy: {
       "/api": {

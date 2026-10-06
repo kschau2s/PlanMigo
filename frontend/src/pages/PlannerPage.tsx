@@ -164,7 +164,7 @@ export function PlannerPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center gap-5 px-4 py-8">
+    <div className="flex min-h-screen items-center justify-center px-4 py-8">
       <PhoneFrame
         header={
           <>
